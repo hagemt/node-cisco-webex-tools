@@ -1,0 +1,67 @@
+{
+  "name": "ciscospark-tools",
+  "version": "0.1.0",
+  "author": "Tor E Hagemann <tor.hagemann@gmail.com>",
+  "description": "Helps you grok Cisco Spark",
+  "homepage": "https://github.com/hagemt/node-ciscospark-tools#readme",
+  "license": "MIT",
+  "main": "source/index.js",
+  "bugs": {
+    "url": "https://github.com/hagemt/node-ciscospark-tools/issues"
+  },
+  "dependencies": {
+    "commander": "2.13.0",
+    "debug": "3.1.0",
+    "lodash": "4.17.4",
+    "node-fetch": "1.7.3",
+    "uuid": "3.1.0"
+  },
+  "devDependencies": {
+    "eslint": "4.15.0",
+    "eslint-plugin-import": "2.8.0",
+    "eslint-plugin-mocha": "4.11.0",
+    "eslint-plugin-node": "5.2.1",
+    "mocha": "4.1.0",
+    "nyc": "11.4.1"
+  },
+  "directories": {
+    "bin": "scripts/bin",
+    "doc": "Documentation",
+    "example": "scripts",
+    "lib": "source",
+    "man": "Documentation/man",
+    "test": "source/test"
+  },
+  "engines": {
+    "node": ">=8.0.0"
+  },
+  "keywords": [
+    "cisco",
+    "spark",
+    "ciscospark",
+    "tool",
+    "tools",
+    "script",
+    "command"
+  ],
+  "nyc": {
+    "exclude": [
+      "**/*.tests.js"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/hagemt/node-ciscospark-tools.git"
+  },
+  "scripts": {
+    "coverage": "nyc mocha source",
+    "eslint": "eslint .eslintrc.js scripts source --report-unused-disable-directives",
+    "postinstall": "npm run script # prints usage hints",
+    "postreport": "npm run eslint -- --max-warnings 0",
+    "prereport": "npm run eslint -- --fix",
+    "report": "npm run coverage",
+    "script": "node scripts",
+    "start": "npm run script",
+    "test": "npm run report"
+  }
+}
