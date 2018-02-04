@@ -9,28 +9,29 @@ describe('SparkError', () => {
 
 	describe('fromResponse', () => {
 
-		const mockResponse = async ({ json, status }) => {
-			return Object.freeze({
-				json: async () => json,
-				status,
-			})
+		const mockResponse = async ({ json: body, status = 501 }) => {
+			const json = async () => body // once only?
+			return Object.freeze({ json, status })
 		}
 
 		it('can parse response from fetch', async () => {
-			//const response = await fetch(...)
-			const json = Object.freeze({
+			const body =  Object.freeze({
 				message: 'useful details',
 				trackingId: 'some slug',
 			})
-			const status = 501
-			const response = await mockResponse({ json, status })
+			//const response = await fetch(...)
+			const response = await mockResponse({
+				json: body,
+			})
 			return SparkError.fromResponse(response)
 				.then((error) => {
 					assert(error instanceof SparkError, 'SparkError returned')
 					assert(error instanceof Error, 'SparkError extends Error')
-					assert(error.message.includes(json.message), 'includes message')
-					assert(error.message.includes(json.trackingId), 'includes tracking ID')
-					assert(error.message.includes(status), 'includes status')
+					assert(error.message.includes(body.message), 'includes message')
+					assert(error.message.includes(body.trackingId), 'includes tracking ID')
+					assert(error.message.includes(response.status), 'includes status')
+					assert.strictEqual(error.response, response, 'has response')
+					assert.strictEqual(error.body, body, 'has body')
 				})
 		})
 
@@ -39,7 +40,7 @@ describe('SparkError', () => {
 	describe('retryAfter', () => {
 
 		it('runs the provided callback as delayed', (done) => {
-			SparkError.retryAfter('0', done)
+			SparkError.retryAfter(null, done)
 		})
 
 	})

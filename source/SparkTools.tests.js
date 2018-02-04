@@ -12,7 +12,7 @@ describe('SparkTools', () => {
 	describe('constructor', () => {
 
 		it('will throw TypeError if not provided a Bearer token', async () => {
-			const error = await newSparkTools().catch(error => error)
+			const error = await newSparkTools().catch(thrownError => thrownError)
 			assert(error instanceof TypeError, 'expected TypeError thrown')
 			assert(error.message.includes('export CISCOSPARK_ACCESS_TOKEN'), 'expected mention of env')
 			assert(error.message.includes('dev.ciscospark.com'), 'expected mention of developer portal')
