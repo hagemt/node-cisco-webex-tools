@@ -1,4 +1,5 @@
 const querystring = require('querystring')
+const url = require('url')
 
 const _ = require('lodash')
 const fetch = require('node-fetch')
@@ -6,13 +7,23 @@ const fetch = require('node-fetch')
 const log = require('./log.js')
 const SparkError = require('./SparkError.js')
 
-const BASE_URL = process.env.CISCOSPARK_BASE_URL || 'http://api.ciscospark.com'
-const buildURL = (someURI, baseURL = BASE_URL) => `${baseURL}${someURI}`
+const DEFAULT_ORIGIN = process.env.CISCOSPARK_URL_ORIGIN || 'https://api.ciscospark.com'
+const buildURL = (uri, origin = DEFAULT_ORIGIN) => new url.URL(uri, origin).toString()
 
+const QUERY_OPTIONS = Object.freeze(['max'])
+const MAX_PAGE_SIZE = 1000 // default ?max=
+
+const JSON_MEDIA_TYPE = 'application/json'
 const DEFAULT_HEADERS = Object.freeze({
-	'Accept': 'application/json',
-	'Content-Type': 'application/json',
+	'accept': JSON_MEDIA_TYPE,
+	'content-type': JSON_MEDIA_TYPE,
 })
+
+const parseFirstNextLink = (...args) => {
+	const joined = [].concat(...args).join('\n')
+	const matches = /<(.*)>; rel="next"/g.exec(joined)
+	return _.get(matches, 1) // otherwise, undefined
+}
 
 class SparkTools {
 
@@ -22,27 +33,43 @@ class SparkTools {
 			throw new TypeError('export CISCOSPARK_ACCESS_TOKEN=... # from dev.ciscospark.com')
 		}
 		this.json = async (uri, options) => {
-			const requestURL = buildURL(uri)
-			const Authorization = `Bearer ${userAccessToken}`
-			const headers = Object.assign({ Authorization }, DEFAULT_HEADERS, options.headers)
-			const request = Object.assign({ method: 'GET', url: requestURL }, options, { headers })
+			const requestURL = buildURL(uri) // using the DEFAULT_ORIGIN (since no second [origin] parameter is provided)
+			const headers = Object.assign({ authorization: `Bearer ${userAccessToken}` }, DEFAULT_HEADERS, _.get(options, 'headers'))
+			const request = Object.assign({ method: 'GET', page: true, retry: true, url: requestURL }, options, { headers })
+			if (typeof request.body === 'object') request.body = JSON.stringify(request.body)
 			const response = await this.fetch(requestURL, request)
 			switch (response.status) {
 			case 200: // OK
+				if (!request.page || !response.headers.has('link')) {
+					return response.json() // don't/can't page
+				}
+				return this.page(response, request)
 			case 201: // Created
 				return response.json()
 			case 204: // No Content
-				return null
-			case 401:
+				return
+			case 401: // Unauthorized
 				throw new SparkError('access token is invalid (get a new one from dev.ciscospark.com)')
-			case 429:
-				if (!options.retry) {
+			case 429: // Too Many Requests
+				if (!request.retry || !response.headers.has('retry-after')) {
 					throw new SparkError('sent Too Many Requests (according to Spark) and will not retry')
 				}
-				return SparkError.retryAfter(response.get('retry-after'), () => this.json(uri, options))
+				return SparkError.retryAfter(response.headers.get('retry-after'), async () => this.json(uri, options))
 			default:
 				throw await SparkError.fromResponse(response).catch(nonSparkError => nonSparkError)
 			}
+		}
+		this.page = async (response, request, array = []) => {
+			const { items } = await response.json()
+			for (const item of items) array.push(item)
+			const linkHeaders = response.headers.get('link')
+			const nextURL = parseFirstNextLink(linkHeaders)
+			if (!nextURL) return { items: array } // done
+			const next = await this.fetch(nextURL, {
+				// same Authorization, etc.
+				headers: request.headers,
+			})
+			return this.page(next, request, array)
 		}
 	}
 
@@ -62,51 +89,47 @@ class SparkTools {
 		return response
 	}
 
-	// @SupportedMethod
-	// @WriteOperation
 	async addParticipantToTeam (personEmail, teamId, isModerator = false) {
-		log.debug('add person (email: %s) to team (id: %s)', personEmail, teamId)
+		log.debug('add (moderator: %s) participant (email: %s) to team (id: %s)',
+			isModerator ? 'true' : 'false',
+			personEmail,
+			teamId,
+		)
 		return this.json('/v1/team/memberships', {
-			body: JSON.stringify({ isModerator, personEmail, teamId }),
+			body: { isModerator, personEmail, teamId },
 			method: 'POST',
 		})
 	}
 
-	// @SupportedMethod
-	// @WriteOperation
 	async createTeamAsModerator ({ name }) {
 		log.debug('create team (name: %s)', name)
 		return this.json('/v1/teams', {
-			body: JSON.stringify({ name }),
+			body: { name },
 			method: 'POST',
 		})
 	}
 
-	// @SupportedMethod
-	async getPerson (person = 'me') {
+	async getPersonDetails (person = 'me') {
 		const id = _.get(person, 'id', person)
 		return this.json(`/v1/people/${id}`)
 	}
 
-	// @SupportedMethod
-	async getTeam (team) {
+	async getTeamDetails (team) {
 		const id = _.get(team, 'id', team)
 		if (!id) throw new Error('no team.id')
 		return this.json(`/v1/teams/${id}`)
 	}
 
-	// @SupportedMethod
-	async getTeams () {
-		// FIXME (tohagema): make this do pagination?
-		const { items } = await this.json('/v1/teams', {
-			method: 'GET',
-		})
+	async findTeams (...args) {
+		const options = Object.assign({ max: MAX_PAGE_SIZE }, ...args)
+		const query = querystring.stringify(_.pick(options, QUERY_OPTIONS))
+		const { items } = await this.json(`/v1/teams?${query}`)
 		return items
 	}
 
-	async getTeamMembership (personId, teamId) {
+	async findTeamMembership (personId, teamId) {
 		/*
-		const encodeID = (suffix, prefix = 'ciscospark://us/TEAM_MEMBERSHIP') => {
+		const encodeID = (suffix, prefix = 'ciscospark://us/TEAM_MEMBERSHIP/') => {
 			const encoded = Buffer.from(`${prefix}${suffix}`).toString('base64')
 			return encoded.replace('+', '-').replace('/', '_').replace(/=+$/, '')
 		}
@@ -114,6 +137,7 @@ class SparkTools {
 			const decoded = Buffer.from(encoded, encoding).toString()
 			return decoded.slice(decoded.lastIndexOf('/') + 1)
 		}
+		// this should work in concept, but it's really gross
 		const personUUID = decodeUUID(personId) // base64url
 		const teamUUID = decodeUUID(teamId) // also base64url
 		const id = encodeID(`${personUUID}:${teamUUID}`)
@@ -121,16 +145,17 @@ class SparkTools {
 		*/
 		const query = querystring.stringify({ max: 1, personId, teamId })
 		const { items } = await this.json(`/v1/team/memberships?${query}`)
-		if (items.length === 1) return items[0] // else, throw:
-		throw new Error('')
+		if (_.get(items, 0)) return items[0] // otherwise, fail loudly:
+		const parties = `person (id: ${personId}) and team (id: ${teamId})`
+		throw new Error(`found no membership relation between ${parties}`)
 	}
 
-	async getTeamsUnderMyModeration () {
-		const me = await this.getPerson()
-		const teams = await this.getTeams()
+	async findTeamsModeratedByMe () {
+		const me = await this.getPersonDetails()
+		const teams = await this.findTeams()
 		const isModerator = await Promise.all(teams.map(async (team) => {
-			const myTeamMembership = await this.getTeamMembership(me.id, team.id)
-			return myTeamMembership.isModerator // Boolean
+			const myTeamMembership = await this.findTeamMembership(me.id, team.id)
+			return myTeamMembership.isModerator // if false, team filtered out
 		}))
 		const BY_CREATED_DATE = (lhs, rhs) => Math.sign(+new Date(rhs) - +new Date(lhs))
 		return teams.filter((team, index) => isModerator[index]).sort(BY_CREATED_DATE)
