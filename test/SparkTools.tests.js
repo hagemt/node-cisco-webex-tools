@@ -1,9 +1,10 @@
 /* eslint-env mocha */
 const assert = require('assert')
 
+const { Response } = require('node-fetch')
 const UUID = require('uuid')
 
-const SparkTools = require('./SparkTools.js')
+const SparkTools = require('../support/SparkTools.js')
 
 describe('SparkTools', () => {
 
@@ -12,8 +13,8 @@ describe('SparkTools', () => {
 	describe('constructor', () => {
 
 		it('will throw TypeError if not provided a Bearer token', async () => {
-			const error = await newSparkTools().catch(thrownError => thrownError)
-			assert(error instanceof TypeError, 'expected TypeError thrown')
+			const error = await newSparkTools('').catch(thrownError => thrownError)
+			assert(error instanceof TypeError, 'expected TypeError thrown due to empty token')
 			assert(error.message.includes('export CISCOSPARK_ACCESS_TOKEN'), 'expected mention of env')
 			assert(error.message.includes('dev.ciscospark.com'), 'expected mention of developer portal')
 		})
@@ -62,36 +63,33 @@ describe('SparkTools', () => {
 			}
 		}
 
-		const fakeResponse = (body, status = 200) => {
-			const json = async () => body
-			return Object.freeze({ json, status })
-		}
-
 		const fake = Object.assign({}, fakeResources(), {
 			token: 'usually CISCOSPARK_ACCESS_TOKEN',
 		})
 
+		const okResponse = body => new Response(typeof body === 'string' ? body.slice() : JSON.stringify(body), { status: 200 })
+
 		before(async () => {
 			fake.tools = await newSparkTools(fake.token)
-			fake.tools.fetch = async () => fakeResponse()
+			fake.tools.fetch = async () => new Response()
 		})
 
-		it('#getPerson defaults to GET /v1/people/me', async () => {
-			fake.tools.fetch = async () => fakeResponse(fake.person)
-			const person = await fake.tools.getPerson()
+		it('#getPersonDetails defaults to GET /v1/people/me', async () => {
+			fake.tools.fetch = async () => okResponse(fake.person)
+			const person = await fake.tools.getPersonDetails()
 			assert.deepStrictEqual(person, fake.person)
 		})
 
 		const test = (inputJSON, methodName, ...args) => {
 			it(`#${methodName} (id: ${UUID.v4()})`, async () => {
-				fake.tools.fetch = async () => fakeResponse(inputJSON)
+				fake.tools.fetch = async () => okResponse(inputJSON)
 				const outputJSON = await fake.tools[methodName](...args)
 				assert.deepStrictEqual(inputJSON, outputJSON)
 			})
 		}
 
-		test(fake.person, 'getPerson', fake.person.id)
-		//test(fake.team, 'getTeam', fake.team.id)
+		test(fake.person, 'getPersonDetails', fake.person.id)
+		//test(fake.team, 'getTeamDetails', fake.team.id)
 
 	})
 

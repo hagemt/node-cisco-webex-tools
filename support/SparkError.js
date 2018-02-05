@@ -11,7 +11,7 @@ class SparkError extends Error {
 		const body = await response.json().catch(() => null)
 		const details = _.get(body, 'message', statusMessage)
 		const tracking = _.get(body, 'trackingId', 'missing')
-		const message = `Status ${response.status}: ${details} (tracking ID: ${tracking})`
+		const message = `status ${response.status}: ${details} (tracking ID: ${tracking})`
 		log.debug('Error from Spark; %s', message) // in case it gets swallowed
 		return Object.assign(new SparkError(message), { body, response })
 	}

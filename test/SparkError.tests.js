@@ -1,27 +1,21 @@
 /* eslint-env mocha */
 const assert = require('assert')
 
-//const fetch = require('node-fetch')
+const { Response } = require('node-fetch')
 
-const SparkError = require('./SparkError.js')
+const SparkError = require('../support/SparkError.js')
 
 describe('SparkError', () => {
 
 	describe('fromResponse', () => {
 
-		const mockResponse = async ({ json: body, status = 501 }) => {
-			const json = async () => body // once only?
-			return Object.freeze({ json, status })
-		}
-
 		it('can parse response from fetch', async () => {
-			const body =  Object.freeze({
+			const body = Object.freeze({
 				message: 'useful details',
 				trackingId: 'some slug',
 			})
-			//const response = await fetch(...)
-			const response = await mockResponse({
-				json: body,
+			const response = new Response(JSON.stringify(body), {
+				status: 501,
 			})
 			return SparkError.fromResponse(response)
 				.then((error) => {
@@ -31,7 +25,7 @@ describe('SparkError', () => {
 					assert(error.message.includes(body.trackingId), 'includes tracking ID')
 					assert(error.message.includes(response.status), 'includes status')
 					assert.strictEqual(error.response, response, 'has response')
-					assert.strictEqual(error.body, body, 'has body')
+					assert.deepStrictEqual(error.body, body, 'has body')
 				})
 		})
 

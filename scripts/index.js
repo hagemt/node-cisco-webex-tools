@@ -1,36 +1,34 @@
 const childProcess = require('child_process')
 const path = require('path')
 
-const commander = require('commander')
 const _ = require('lodash')
 
-const packageJSON = require('../package.json')
 const log = require('../support/log.js')
+
+const forkProcess = (scriptName, ...args) => {
+	const modulePath = path.resolve(__dirname, `${scriptName}.js`)
+	const child = childProcess.fork(modulePath, args, {
+		cwd: process.cwd(),
+		env: process.env,
+		stdio: 'inherit',
+	})
+	return child
+}
 
 const supportedScripts = Object.freeze({
 	'onboard-teams': 'create a new Team from an email roster',
 })
 
-const getCommander = () => {
-	const versionString = packageJSON.version || '0.0.0'
-	return commander.version(versionString, '-v, --version')
-}
-
 module.exports = {
-	getCommander,
+	forkProcess,
 }
 
 if (!module.parent) {
 	const [scriptName, ...args] = process.argv.slice(2)
-	log.debug('script %s: %s', scriptName, args.join(' '))
 	if (scriptName in supportedScripts) {
-		const modulePath = path.resolve(__dirname, `${scriptName}.js`)
-		const child = childProcess.fork(modulePath, args, {
-			cwd: process.cwd(),
-			env: process.env,
-			stdio: 'inherit',
-		})
-		child.on('exit', (code, signal) => {
+		log.debug('script %s: %s', scriptName, args.join(' '))
+		const child = forkProcess(scriptName, ...args)
+		child.once('exit', (code, signal) => {
 			if (signal) process.exitCode = 1
 			else process.exitCode = code
 		})

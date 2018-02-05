@@ -6,6 +6,9 @@
   "homepage": "https://github.com/hagemt/node-ciscospark-tools#readme",
   "license": "MIT",
   "main": "support/index.js",
+  "bin": {
+    "ciscospark-tools": "scripts/ciscospark-tools.js"
+  },
   "bugs": {
     "url": "https://github.com/hagemt/node-ciscospark-tools/issues"
   },
@@ -27,12 +30,7 @@
     "nyc": "11.4.1"
   },
   "directories": {
-    "bin": "scripts/bin",
-    "doc": "Documentation",
-    "example": "scripts",
-    "lib": "support",
-    "man": "Documentation/man",
-    "test": "support/test"
+    "test": "test"
   },
   "engines": {
     "node": ">=8.0.0"
@@ -56,9 +54,9 @@
     "url": "git+ssh://git@github.com/hagemt/node-ciscospark-tools.git"
   },
   "scripts": {
-    "coverage": "nyc mocha scripts support; nyc report --reporter=html # and in console",
-    "eslint": "eslint .eslintrc.js scripts support --report-unused-disable-directives",
-    "postinstall": "npm run script # prints usage hints",
+    "coverage": "nyc --reporter=html --reporter=text-summary mocha",
+    "eslint": "eslint .eslintrc.js scripts support test --report-unused-disable-directives",
+    "postinstall": "npm run script",
     "postreport": "npm run eslint -- --max-warnings 0",
     "prereport": "npm run eslint -- --fix",
     "report": "npm run coverage",
