@@ -4,7 +4,7 @@ const path = require('path')
 const _ = require('lodash')
 const inquirer = require('inquirer')
 
-const SparkTools = require('../source/SparkTools.js')
+const SparkTools = require('../support/SparkTools.js')
 const newSeparator = line => new inquirer.Separator(line)
 
 const CHOICES_PAGE_SIZE = process.stdout.rows || 10
@@ -54,19 +54,21 @@ const parseRoster = async (filename) => {
 	throw new Error(`email roster (size: ${set.size}) outside bounds: [1, ${PARTICIPANT_LIMIT})`)
 }
 
-const onboardTeams = async (userAccessToken, teamRosterFiles, isDryRun) => {
+const onboardTeams = async (teamRosterFiles, userAccessToken, isDryRun, noPrompts, safe) => {
 	const spark = SparkTools.fromAccessToken(userAccessToken)
-	const onboardTeam = async ({ id, name }, ...participantEmails) => {
-		const createTeam = !!name && !id // create a team if only the name is provided (no team ID)
-		const team = await (createTeam ? spark.createTeamAsModerator({ name }) : spark.getTeam({ id }))
+	const onboardTeam = async ({ id, name }, ...personEmails) => {
+		const createTeam = !!name && !id // will create a new team when only the name is provided (no team ID)
+		const team = await (createTeam ? spark.createTeamAsModerator({ name }) : spark.getTeamDetails({ id }))
 		const addParticipantToTeamErrors = new Map() // useful for debug
-		for (const participantEmail of participantEmails) {
+		const addParticipantToTeam = async (personEmail) => {
 			try {
-				await spark.addParticipantToTeam(participantEmail, team.id)
+				await spark.addParticipantToTeam(personEmail, team.id)
 			} catch (sparkError) {
-				addParticipantToTeamErrors.set(participantEmail, sparkError)
+				addParticipantToTeamErrors.set(personEmail, sparkError)
 			}
 		}
+		if (!safe) await Promise.all(personEmails.map(addParticipantToTeam)) // likely 429s
+		else for (const personEmail of personEmails) await addParticipantToTeam(personEmail)
 		for (const [personEmail, sparkError] of addParticipantToTeamErrors) {
 			logWarning(`failed to add person (email: ${personEmail}) to team (name: ${team.name}) due to:`, sparkError)
 		}
@@ -77,27 +79,31 @@ const onboardTeams = async (userAccessToken, teamRosterFiles, isDryRun) => {
 		try {
 			teamRosters.set({ name: teamname }, await parseRoster(filename))
 		} catch (parseError) {
-			//teamRosters.set({ name: filename }, { error: parseError })
 			logWarning(`email roster (filename: ${filename}) format (one email per line) problem:`, parseError)
 		}
 	}
-	if (!isDryRun) {
-		const teams = await spark.getTeamsModeratedByMe().catch(() => [])
-		const onboardTeamErrors = new Map() // useful for debug
-		for (const [rosteredTeam, teamRoster] of teamRosters) {
-			try {
-				// TODO: should support some non-interactive use cases?
-				const team = await promptName(rosteredTeam, ...teams)
-				teams.push(await onboardTeam(team, ...teamRoster))
-			} catch (sparkError) {
-				onboardTeamErrors.set(rosteredTeam, sparkError)
-			}
-		}
-		for (const [targetTeam, sparkError] of onboardTeamErrors) {
-			logWarning(`failed to onboard team (name: ${targetTeam.name}) due to:`, sparkError)
+	const teamsModeratedByMe = await spark.findTeamsModeratedByMe().catch(() => []) // always create team, unless:
+	const teamNamedID = ({ name }) => /^ciscospark:\/\/us\/TEAM\/[0-9-a-f]{36}$/.test(Buffer.from(name, 'base64'))
+	const onboardTeamErrors = new Map() // useful for debug
+	for (const [rosteredTeam, teamRoster] of teamRosters) {
+		try {
+			if (teamNamedID(rosteredTeam)) rosteredTeam.id = rosteredTeam.name // dirty hack
+			if (!noPrompts) await promptName(rosteredTeam, ...teamsModeratedByMe) // see above
+			if (!isDryRun) teamsModeratedByMe.push(await onboardTeam(rosteredTeam, ...teamRoster))
+		} catch (sparkError) {
+			onboardTeamErrors.set(rosteredTeam, sparkError)
 		}
 	}
+	for (const [targetTeam, sparkError] of onboardTeamErrors) {
+		logWarning(`failed to onboard team (name: ${targetTeam.name}) due to:`, sparkError)
+	}
 	return teamRosters
+}
+
+module.exports = {
+	onboardTeams,
+	parseRoster,
+	promptName,
 }
 
 if (!module.parent) {
@@ -108,21 +114,20 @@ if (!module.parent) {
 		console.error('# filename (w/o .txt) is new team name; for existing team, use $id.txt; rosters list email addresses')
 		process.exit() // eslint-disable-line no-process-exit
 	}
-	const { BASE_PATH, CISCOSPARK_ACCESS_TOKEN, DRY_RUN } = Object(process.env)
-	const basePath = BASE_PATH || process.cwd() // default: current working dir
-	const isDryRun = Boolean(JSON.parse(DRY_RUN || 'null')) // default: false
-	const keys = Array.from(rosters, roster => roster.replace(/\.txt$/, ''))
-	const values = Array.from(rosters, roster => path.resolve(basePath, roster))
-	onboardTeams(CISCOSPARK_ACCESS_TOKEN, _.zipObject(keys, values), isDryRun)
+	const parseBoolean = (maybeJSON, defaultJSON = 'null') => Boolean(JSON.parse(maybeJSON || defaultJSON))
+	const { CISCOSPARK_ACCESS_TOKEN, CISCOSPARK_ROSTERS_PATH, DRY_RUN, NO_PROMPTS } = Object(process.env)
+	const rostersPath = CISCOSPARK_ROSTERS_PATH || process.cwd() // optionally, keep rosters in this folder
+	const [isDryRun, noPrompts] = [parseBoolean(DRY_RUN), parseBoolean(NO_PROMPTS) || !process.stdin.isTTY]
+	const names = Array.from(rosters, roster => path.parse(roster).name) // basename without file extension
+	const paths = Array.from(rosters, roster => path.resolve(rostersPath, roster)) // absolute path to file
+	onboardTeams(_.zipObject(names, paths), CISCOSPARK_ACCESS_TOKEN, isDryRun, noPrompts, true) // dirty hack
 		.then((teamRosters) => {
 			for (const [rosteredTeam, teamRoster] of teamRosters) {
 				if (DRY_RUN) {
-					console.info(`onboarding team (name: ${rosteredTeam.name}) email roster (size: ${teamRoster.size}) dry run:`)
+					console.info(`would onboard team (name: ${rosteredTeam.name}) email roster (size: ${teamRoster.size}) with:`)
+					for (const personEmail of teamRoster) console.info(`\t${personEmail}`)
 				} else {
-					console.info(`onboarding team (name: ${rosteredTeam.name}) email roster (size: ${teamRoster.size}) attempted:`)
-				}
-				for (const personEmail of teamRoster) {
-					console.info(`\t${personEmail}`)
+					console.info(`finished onboarding team (name: ${rosteredTeam.name}) email roster (size: ${teamRoster.size})`)
 				}
 			}
 		})

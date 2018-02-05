@@ -19,12 +19,6 @@ const DEFAULT_HEADERS = Object.freeze({
 	'content-type': JSON_MEDIA_TYPE,
 })
 
-const parseFirstNextLink = (...args) => {
-	const joined = [].concat(...args).join('\n')
-	const matches = /<(.*)>; rel="next"/g.exec(joined)
-	return _.get(matches, 1) // otherwise, undefined
-}
-
 class SparkTools {
 
 	// constructor signature is volatile; use static factory methods
@@ -41,7 +35,7 @@ class SparkTools {
 			switch (response.status) {
 			case 200: // OK
 				if (!request.page || !response.headers.has('link')) {
-					return response.json() // don't/can't page
+					return response.json() // won't (or, can't) page
 				}
 				return this.page(response, request)
 			case 201: // Created
@@ -62,8 +56,9 @@ class SparkTools {
 		this.page = async (response, request, array = []) => {
 			const { items } = await response.json()
 			for (const item of items) array.push(item)
-			const linkHeaders = response.headers.get('link')
-			const nextURL = parseFirstNextLink(linkHeaders)
+			const linkHeader = response.headers.get('link')
+			const nextURLs = /<(.+?)>; rel="next"/g.exec(linkHeader)
+			const nextURL = _.get(nextURLs, 1) // may be undefined
 			if (!nextURL) return { items: array } // done
 			const next = await this.fetch(nextURL, {
 				// same Authorization, etc.
@@ -144,8 +139,10 @@ class SparkTools {
 		return this.json(`/v1/team/memberships/${id}`)
 		*/
 		const query = querystring.stringify({ max: 1, personId, teamId })
-		const { items } = await this.json(`/v1/team/memberships?${query}`)
-		if (_.get(items, 0)) return items[0] // otherwise, fail loudly:
+		const { items } = await this.json(`/v1/team/memberships?${query}`, {
+			page: false, // FIXME (tohagema): is there a page bug here?
+		})
+		if (_.get(items, 0)) return items[0] // otherwise, will fail loudly:
 		const parties = `person (id: ${personId}) and team (id: ${teamId})`
 		throw new Error(`found no membership relation between ${parties}`)
 	}
