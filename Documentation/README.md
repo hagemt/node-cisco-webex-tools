@@ -8,7 +8,7 @@ The `man` subdirectory contains compiled manual pages.
 
 ## Scripts API
 
-Please fork and open Pull Requests that add value to `ciscospark-tools`! (max one script per PR, please)
+Fork, and then open Pull Requests that add value to `ciscospark-tools`! (max one script per PR, please)
 
 Each script should ideally consist of a single module and follow the general conventions of `onboard-teams`.
 
@@ -26,7 +26,7 @@ Instances of `SparkTools` should be created via the static factory methods, such
 
 `SparkTools` class methods are either "plumbing" or "porcelian" (makes use of the plumbing) in nature.
 
-This is a common pattern in the *nix tradition for writing "onion" APIs, which is built in layers.
+This is a common pattern in the *nix tradition for writing "onion" APIs, which are built in layers.
 
 ### Plumbing
 
