@@ -11,14 +11,14 @@ class SparkError extends Error {
 		const body = await response.json().catch(() => null)
 		const details = _.get(body, 'message', statusMessage)
 		const tracking = _.get(body, 'trackingId', 'missing')
-		const message = `status ${response.status}: ${details} (tracking ID: ${tracking})`
-		log.debug('Error from Spark; %s', message) // in case it gets swallowed
+		const message = `(tracking ID: ${tracking}) ${details}`
+		log.debug('Error from Spark %s', message) // too much logging?
 		return Object.assign(new SparkError(message), { body, response })
 	}
 
 	static async retryAfter (header, retry) {
 		const seconds = Number(header) || 0 // default: no wait
-		log.debug('Request retry after: %s (seconds)', seconds)
+		log.debug('Scheduled retry after: %s (seconds)', seconds)
 		await new Promise(done => setTimeout(done, seconds * 1000))
 		return retry()
 	}
