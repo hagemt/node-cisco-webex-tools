@@ -2,7 +2,7 @@
 const assert = require('assert')
 
 const { Response } = require('node-fetch')
-const UUID = require('uuid')
+const { v4: randomUUID } = require('uuid')
 
 const SparkTools = require('../support/SparkTools.js')
 
@@ -23,7 +23,7 @@ describe('SparkTools', () => {
 
 	describe('internals', () => {
 
-		const base64urlID = (middle, suffix = `/${UUID.v1()}`, prefix = 'ciscospark://us/') => {
+		const base64urlID = (middle, suffix = `/${randomUUID()}`, prefix = 'ciscospark://us/') => {
 			const id = Buffer.from([prefix, middle, suffix].join('')).toString('base64')
 			return id.replace('/', '_').replace('+', '-').replace(/=+$/, '')
 		}
@@ -81,7 +81,7 @@ describe('SparkTools', () => {
 		})
 
 		const test = (inputJSON, methodName, ...args) => {
-			it(`#${methodName} (id: ${UUID.v4()})`, async () => {
+			it(`#${methodName} (id: ${randomUUID()})`, async () => {
 				fake.tools.fetch = async () => okResponse(inputJSON)
 				const outputJSON = await fake.tools[methodName](...args)
 				assert.deepStrictEqual(inputJSON, outputJSON)

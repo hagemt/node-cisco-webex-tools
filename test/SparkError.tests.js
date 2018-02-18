@@ -23,7 +23,6 @@ describe('SparkError', () => {
 					assert(error instanceof Error, 'SparkError extends Error')
 					assert(error.message.includes(body.message), 'includes message')
 					assert(error.message.includes(body.trackingId), 'includes tracking ID')
-					assert(error.message.includes(response.status), 'includes status')
 					assert.strictEqual(error.response, response, 'has response')
 					assert.deepStrictEqual(error.body, body, 'has body')
 				})

@@ -19,6 +19,28 @@ const DEFAULT_HEADERS = Object.freeze({
 	'content-type': JSON_MEDIA_TYPE,
 })
 
+const base64url = (...args) => {
+	const buffer = Buffer.from(...args).toString('base64')
+	return buffer.replace('+', '-').replace('/', '_').replace(/=+$/, '')
+}
+
+const decodeUUID = (encoded, encoding = 'base64') => {
+	const decoded = Buffer.from(encoded, encoding).toString()
+	return decoded.slice(decoded.lastIndexOf('/') + 1)
+}
+
+const createdDate = ({ created }) => created ? new Date(created) : new Date() // default: now
+const MOST_RECENTLY_CREATED_FIRST = (lhs, rhs) => Math.sign(createdDate(rhs) - createdDate(lhs))
+
+/**
+ * Make requests and parse responses from public Spark APIs. Add methods to support scripts.
+ *
+ * Try to follow conventions of existing methods, and delegate/re-use when it makes sense to do so.
+ *
+ * To ignore auto-page/retry mechanism(s), specify page/retry: false (in options or on class instances)
+ *
+ * As a general rule, try to remain orderly: don't add unnecessary plumbing, and keep porcelian consistent.
+ */
 class SparkTools {
 
 	// constructor signature is volatile; use static factory methods
@@ -34,8 +56,8 @@ class SparkTools {
 			const response = await this.fetch(requestURL, request)
 			switch (response.status) {
 			case 200: // OK
-				if (!request.page || !response.headers.has('link')) {
-					return response.json() // won't (or, can't) page
+				if (!this.page || !request.page || !response.headers.has('link')) {
+					return response.json() // can't or won't (so don't) auto-page
 				}
 				return this.page(response, request)
 			case 201: // Created
@@ -45,7 +67,8 @@ class SparkTools {
 			case 401: // Unauthorized
 				throw new SparkError('access token is invalid (get a new one from dev.ciscospark.com)')
 			case 429: // Too Many Requests
-				if (!request.retry || !response.headers.has('retry-after')) {
+				//if (!this.retry || !request.retry || !response.headers.has('retry-after')) { // sometimes missing?!
+				if (!this.retry || !request.retry) {
 					throw new SparkError('sent Too Many Requests (according to Spark) and will not retry')
 				}
 				return SparkError.retryAfter(response.headers.get('retry-after'), async () => this.json(uri, options))
@@ -71,20 +94,22 @@ class SparkTools {
 	/* istanbul ignore next */
 	async fetch (url, options) {
 		const hrtime = process.hrtime()
-		const response = await fetch(url, options)
+		const response = await fetch(url, options).catch(error => error)
 		const [s, ns] = process.hrtime(hrtime)
 		// e.g. GET /v1/people/me => 200 OK (in 0.200s)
 		log.debug('fetch: %s %s => %s %s (in %ss)',
 			options.method || 'GET',
 			url || options.url || '/',
-			String(response.status || 0),
+			String(Number(response.status) || 0),
 			SparkError.statusMessage(response),
 			Number(s + ns / 1e9).toFixed(3),
 		)
+		if (response instanceof Error) throw response
 		return response
 	}
 
-	async addParticipantToTeam (personEmail, teamId, isModerator = false) {
+	async addMembershipToTeam ({ personEmail }, team, isModerator = false) {
+		const teamId = _.get(team, 'id', team)
 		log.debug('add (moderator: %s) participant (email: %s) to team (id: %s)',
 			isModerator ? 'true' : 'false',
 			personEmail,
@@ -115,47 +140,34 @@ class SparkTools {
 		return this.json(`/v1/teams/${id}`)
 	}
 
-	async findTeams (...args) {
+	async getTeamMembership (person, team) {
+		const personUUID = decodeUUID(_.get(person, 'id', person))
+		const teamUUID = decodeUUID(_.get(team, 'id', team))
+		const id = base64url(`ciscospark://us/TEAM_MEMBERSHIP/${personUUID}:${teamUUID}`)
+		return this.json(`/v1/team/memberships/${id}`)
+	}
+
+	async listTeamMemberships ({ teamId }) {
+		const query = querystring.stringify({ max: MAX_PAGE_SIZE, teamId })
+		const { items } = await this.json(`/v1/team/memberships?${query}`)
+		return items
+	}
+
+	async listTeams (...args) {
 		const options = Object.assign({ max: MAX_PAGE_SIZE }, ...args)
 		const query = querystring.stringify(_.pick(options, QUERY_OPTIONS))
 		const { items } = await this.json(`/v1/teams?${query}`)
 		return items
 	}
 
-	async findTeamMembership (personId, teamId) {
-		/*
-		const encodeID = (suffix, prefix = 'ciscospark://us/TEAM_MEMBERSHIP/') => {
-			const encoded = Buffer.from(`${prefix}${suffix}`).toString('base64')
-			return encoded.replace('+', '-').replace('/', '_').replace(/=+$/, '')
-		}
-		const decodeUUID = (encoded, encoding = 'base64') => {
-			const decoded = Buffer.from(encoded, encoding).toString()
-			return decoded.slice(decoded.lastIndexOf('/') + 1)
-		}
-		// this should work in concept, but it's really gross
-		const personUUID = decodeUUID(personId) // base64url
-		const teamUUID = decodeUUID(teamId) // also base64url
-		const id = encodeID(`${personUUID}:${teamUUID}`)
-		return this.json(`/v1/team/memberships/${id}`)
-		*/
-		const query = querystring.stringify({ max: 1, personId, teamId })
-		const { items } = await this.json(`/v1/team/memberships?${query}`, {
-			page: false, // FIXME (tohagema): is there a page bug here?
-		})
-		if (_.get(items, 0)) return items[0] // otherwise, will fail loudly:
-		const parties = `person (id: ${personId}) and team (id: ${teamId})`
-		throw new Error(`found no membership relation between ${parties}`)
-	}
-
-	async findTeamsModeratedByMe () {
+	async listTeamsModeratedByMe (...args) {
 		const me = await this.getPersonDetails()
-		const teams = await this.findTeams()
+		const teams = await this.findTeams(...args)
 		const isModerator = await Promise.all(teams.map(async (team) => {
-			const myTeamMembership = await this.findTeamMembership(me.id, team.id)
+			const myTeamMembership = await this.getTeamMembership(me, team)
 			return myTeamMembership.isModerator // if false, team filtered out
 		}))
-		const BY_CREATED_DATE = (lhs, rhs) => Math.sign(+new Date(rhs) - +new Date(lhs))
-		return teams.filter((team, index) => isModerator[index]).sort(BY_CREATED_DATE)
+		return teams.filter((team, index) => isModerator[index]).sort(MOST_RECENTLY_CREATED_FIRST)
 	}
 
 	static fromAccessToken (token) {
