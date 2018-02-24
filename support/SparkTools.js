@@ -151,7 +151,8 @@ class SparkTools {
 		return this.json(`/v1/team/memberships/${id}`)
 	}
 
-	async listTeamMemberships ({ teamId }) {
+	async listTeamMemberships (team) {
+		const teamId = _.get(team, 'id', team)
 		const query = querystring.stringify({ max: MAX_PAGE_SIZE, teamId })
 		const { items } = await this.json(`/v1/team/memberships?${query}`)
 		return items
@@ -165,8 +166,8 @@ class SparkTools {
 	}
 
 	async listTeamsModeratedByMe (...args) {
+		const teams = await this.listTeams(...args)
 		const me = await this.getPersonDetails('me')
-		const teams = await this.findTeams(...args)
 		const isModerator = await Promise.all(teams.map(async (team) => {
 			const myTeamMembership = await this.getTeamMembership(me, team)
 			return myTeamMembership.isModerator // if false, team filtered out

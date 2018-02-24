@@ -1,0 +1,2 @@
+bouncer@sparkbot.io
+parrot@sparkbot.io

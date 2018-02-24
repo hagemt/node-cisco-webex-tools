@@ -86,7 +86,7 @@ const asyncParent = async (parent, env = parent.env) => {
 ciscospark._name = chalk.bold(packageJSON.name || 'ciscospark-tools')
 ciscospark.version(packageJSON.version || 'unknown', '-v, --version')
 
-ciscospark.command(chalk.bold('developer-features') + ' [key] [value]')
+ciscospark.command('developer-features [key] [value]')
 	.description(chalk.blue('list/get/set which functionality your user has toggled (enabled/disabled)'))
 	.option('-d, --debug', chalk.blue('run toggle with DEBUG=ciscospark-tools (verbose mode)'))
 	.action(async (key, value, options) => {
@@ -94,7 +94,7 @@ ciscospark.command(chalk.bold('developer-features') + ' [key] [value]')
 		await asyncChild(process, resolveScript('developer-features.js'), key, value)
 	})
 
-ciscospark.command(chalk.bold('onboard-teams') + ' [email-rosters...]')
+ciscospark.command('onboard-teams [email-rosters...]')
 	.description(chalk.blue('add participants to (new or) existing teams in bulk, using email rosters'))
 	.option('-d, --debug', chalk.blue('run onboarding with DEBUG=ciscospark-tools (verbose mode)'))
 	.option('-n, --dry-run', chalk.blue('skip actual team manipulation; instead, print email rosters'))
@@ -106,15 +106,16 @@ ciscospark.command(chalk.bold('onboard-teams') + ' [email-rosters...]')
 		await asyncChild(process, resolveScript('onboard-teams.js'), ...args)
 	})
 
-ciscospark.command(chalk.bold('tutorial'))
+ciscospark.command('tutorial')
 	.description(chalk.green('if you\'re new to ciscospark-tools (or want to learn more) get started here!'))
-	.action(async () => {
-		// tutorial should take no options; keep it simple
-		await asyncChild(process, resolveScript('meta-tutorial.js'))
+	.action(async (args) => {
+		// one day, args might specify specific tutorial, or tutorial set
+		// tutorial should not specify any options (keep it simple, folks)
+		await asyncChild(process, resolveScript('meta-tutorial.js'), args)
 	})
 
 /*
-ciscospark.command(chalk.bold('update'))
+ciscospark.command('update')
 	.description(chalk.blue(`run this command (or use: npm -g update ${packageJSON.name}) to update ${packageJSON.name}`))
 	.option('-d, --debug', chalk.blue('run check/update with DEBUG=ciscospark-tools (verbose mode)'))
 	.option('-n, --dry-run', chalk.blue('skip actual update, only check for available updates'))
