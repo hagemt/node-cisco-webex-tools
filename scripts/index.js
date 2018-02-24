@@ -42,26 +42,28 @@ const asyncChild = async (parent, modulePath, ...args) => {
 }
 
 const asyncParent = async (parent, env = parent.env) => {
-	const DEFAULT_HOME = Path.resolve(OS.homedir(), `.${packageJSON.name}`)
+	const DEFAULT_CONFIG_PATH = Path.resolve(OS.homedir(), `.${packageJSON.name}`)
 	const { CISCOSPARK_ACCESS_TOKEN, CISCOSPARK_TOOLS_HOME } = Object(env)
-	const PACKAGE_TOOLS_HOME = CISCOSPARK_TOOLS_HOME || DEFAULT_HOME
-	const SECRETS_JSON_PATH = Path.resolve(PACKAGE_TOOLS_HOME, 'secrets.json')
-	const setupSecrets = async () => {
-		if (CISCOSPARK_ACCESS_TOKEN) return // will ignore secrets file
-		const secrets = JSON.parse(FS.readFileSync(SECRETS_JSON_PATH))
+	const CISCOSPARK_CONFIG_PATH = CISCOSPARK_TOOLS_HOME || DEFAULT_CONFIG_PATH
+	const SECRETS_JSON_PATH = Path.resolve(CISCOSPARK_CONFIG_PATH, 'secrets.json')
+	// tutorial will save Authorization in ~/.${packageJSON.name}/secrets.json
+	const setupSecrets = async (secretsPath = SECRETS_JSON_PATH) => {
+		if (CISCOSPARK_ACCESS_TOKEN) return // will ignore any JSON
+		const secrets = JSON.parse(FS.readFileSync(secretsPath))
 		const token = secrets.authorization.access_token
 		if (token) env.CISCOSPARK_ACCESS_TOKEN = token
 		else throw new Error('missing access token')
 	}
-	// one non-invasive way to check for newer CST version:
-	const newerVersion = async () => new Promise((resolve, reject) => {
-		if (!(Math.random() < 0.1)) return resolve() // not true or false
-		const timeoutError = new Error('check took too long for good UX')
-		const timeout = setTimeout(reject, 1000, timeoutError) // one second
-		const newer = ({ 'dist-tags': { latest } }) => (latest !== packageJSON.version)
-		const clear = done => any => { clearTimeout(timeout); done(any) }
-		npmPackage().then(newer).then(clear(resolve), clear(reject))
-	})
+	// non-invasive, single-request method to check NPM for latest CST:
+	const newerVersion = async (packageVersion = packageJSON.version) => {
+		if (Math.random() < 0.90) return Promise.resolve() // usually no operation
+		const newer = ({ 'dist-tags': { latest } }) => (latest !== packageVersion)
+		return new Promise((resolve, reject) => { // otherwise, check NPM quickly:
+			const timeout = setTimeout(reject, 1000, new Error('hit 1s timeout'))
+			const clear = done => any => { clearTimeout(timeout); done(any) }
+			npmPackage().then(newer).then(clear(resolve), clear(reject))
+		})
+	}
 	parent.exitCode = 0 // explicit optimistic outcome(s)
 	const tasks = {
 		newerVersion: await newerVersion().catch(error => error),
@@ -86,47 +88,35 @@ const asyncParent = async (parent, env = parent.env) => {
 ciscospark._name = chalk.bold(packageJSON.name || 'ciscospark-tools')
 ciscospark.version(packageJSON.version || 'unknown', '-v, --version')
 
-ciscospark.command('developer-features [key] [value]')
+ciscospark.command('developer-features [key] [value]').alias('df')
 	.description(chalk.blue('list/get/set which functionality your user has toggled (enabled/disabled)'))
-	.option('-d, --debug', chalk.blue('run toggle with DEBUG=ciscospark-tools (verbose mode)'))
+	.option('-d, --debug', chalk.blue(`run toggle(s) with DEBUG=${packageJSON.name} (verbose mode)`))
 	.action(async (key, value, options) => {
-		if (options.debug) process.env.DEBUG = 'ciscospark-tools' // verbose mode
+		if (options.debug) process.env.DEBUG = packageJSON.name + '*' // more verbose
 		await asyncChild(process, resolveScript('developer-features.js'), key, value)
 	})
 
-ciscospark.command('onboard-teams [email-rosters...]')
+ciscospark.command('onboard-teams [email-rosters...]').alias('ot')
 	.description(chalk.blue('add participants to (new or) existing teams in bulk, using email rosters'))
-	.option('-d, --debug', chalk.blue('run onboarding with DEBUG=ciscospark-tools (verbose mode)'))
+	.option('-d, --debug', chalk.blue(`run onboarding with DEBUG=${packageJSON.name} (verbose mode)`))
 	.option('-n, --dry-run', chalk.blue('skip actual team manipulation; instead, print email rosters'))
 	.option('-y, --no-interactive', chalk.blue('skip all prompts (for which team, team names, etc.)'))
 	.action(async (args, options) => {
-		if (!options.interactive) process.env.NO_PROMPTS = 'true' // no inquirer
-		if (options.debug) process.env.DEBUG = 'ciscospark-tools' // verbose mode
-		if (options.dryRun) process.env.DRY_RUN = 'true' // no write operations
+		if (options.debug) process.env.DEBUG = packageJSON.name + '*' // more verbose
+		if (options.dryRun) process.env.DRY_RUN = 'true' // skip all write operations
+		if (!options.interactive) process.env.NO_PROMPTS = 'true' // skip inquirer
 		await asyncChild(process, resolveScript('onboard-teams.js'), ...args)
 	})
 
-ciscospark.command('tutorial')
-	.description(chalk.green('if you\'re new to ciscospark-tools (or want to learn more) get started here!'))
-	.action(async (args) => {
-		// one day, args might specify specific tutorial, or tutorial set
-		// tutorial should not specify any options (keep it simple, folks)
+ciscospark.command('tutorial [args...]').alias('help')
+	.description(chalk.green(`if you're new to ${packageJSON.name} (or want to learn more) get started here!`))
+	.option('-d, --debug', chalk.blue(`run onboarding with DEBUG=${packageJSON.name} (verbose mode)`))
+	.action(async (args, options) => {
+		if (options.debug) process.env.DEBUG = packageJSON.name + '*'
+		// args might specify specific tutorials, or set(s) of tutorials
 		await asyncChild(process, resolveScript('meta-tutorial.js'), args)
+		ciscospark.outputHelp() // will print before tutorial is complete
 	})
-
-/*
-ciscospark.command('update')
-	.description(chalk.blue(`run this command (or use: npm -g update ${packageJSON.name}) to update ${packageJSON.name}`))
-	.option('-d, --debug', chalk.blue('run check/update with DEBUG=ciscospark-tools (verbose mode)'))
-	.option('-n, --dry-run', chalk.blue('skip actual update, only check for available updates'))
-	.option('-y, --yes', chalk.blue('answer all prompts for confirmation in the affirmative'))
-	.action(async (options) => {
-		if (options.debug) process.env.DEBUG = 'ciscospark-tools'
-		if (options.dryRun) process.env.DRY_RUN = 'true'
-		if (options.yes) process.env.NO_PROMPTS = 'true'
-		await asyncChild(process, resolveScript('meta-update.js'))
-	})
-*/
 
 if (process.env.NODE_ENV === 'test') {
 	ciscospark.command('test-script-failure')
@@ -150,24 +140,27 @@ if (process.env.NODE_ENV === 'test') {
 module.exports = ciscospark
 
 if (!module.parent) {
-	/* eslint-disable no-console */
 	asyncParent(process)
+		/*
 		.then((tasks) => {
 			const all = tasks.parseCommands.args // Array, may have Command
 			const noCommand = all.every(one => typeof one === 'string')
 			// TODO (tohagema): use chalk to decorate text in callback?
 			if (noCommand) ciscospark.outputHelp(text => text + '\n')
 		})
+		*/
 		.catch((error) => {
+			/* eslint-disable no-console */
 			console.error()
 			console.error(Object.assign(error, { message: chalk.red(error.message || 'no error message provided') }))
 			console.error()
-			console.error(chalk.yellow('\tError message(s) above may be due to bugs in the npm package `ciscospark-tools`'))
+			console.error(chalk.yellow(`\tError message(s) above may be due to bugs in the npm package: ${packageJSON.name}`))
 			console.error()
 			console.error(chalk.yellow('\tIf so, please file a GitHub issue (with full reproduction steps) here:'))
 			console.error()
 			console.error(chalk.yellow(`\t${packageJSON.bugs.url}`))
 			console.error()
+			/* eslint-enable no-console */
 			process.exitCode = 1
 		})
 }
