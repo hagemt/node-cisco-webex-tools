@@ -14,7 +14,7 @@ const QUERY_OPTIONS = Object.freeze(['max'])
 const MAX_PAGE_SIZE = 1000 // default ?max=
 
 const JSON_MEDIA_TYPE = 'application/json'
-const DEFAULT_HEADERS = Object.freeze({
+const JSON_REQUEST_HEADERS = Object.freeze({
 	'accept': JSON_MEDIA_TYPE,
 	'content-type': JSON_MEDIA_TYPE,
 })
@@ -24,13 +24,15 @@ const base64url = (...args) => {
 	return buffer.replace('+', '-').replace('/', '_').replace(/=+$/, '')
 }
 
-const decodeUUID = (encoded, encoding = 'base64') => {
+const decodeID = (encoded, encoding = 'base64') => {
 	const decoded = Buffer.from(encoded, encoding).toString()
 	return decoded.slice(decoded.lastIndexOf('/') + 1)
 }
 
 const createdDate = ({ created }) => created ? new Date(created) : new Date() // default: now
 const MOST_RECENTLY_CREATED_FIRST = (lhs, rhs) => Math.sign(createdDate(rhs) - createdDate(lhs))
+const authorizations = new WeakMap() // private mechanism to obtain the secret used, given an instance
+const FEATURE_ORIGIN = process.env.CISCOSPARK_URL_ORIGIN_FEATURE || 'https://feature.a6.ciscospark.com'
 
 /**
  * Make requests and parse responses from public Spark APIs. Add methods to support scripts.
@@ -48,12 +50,14 @@ class SparkTools {
 		if (!userAccessToken || typeof userAccessToken !== 'string') {
 			throw new TypeError('export CISCOSPARK_ACCESS_TOKEN=... # from dev.ciscospark.com')
 		}
+		authorizations.set(this, `Bearer ${userAccessToken}`)
 		this.json = async (uri, options) => {
-			const requestURL = buildURL(uri) // using the DEFAULT_ORIGIN (since no second [origin] parameter is provided)
-			const headers = Object.assign({ authorization: `Bearer ${userAccessToken}` }, DEFAULT_HEADERS, _.get(options, 'headers'))
-			const request = Object.assign({ method: 'GET', page: true, retry: true, url: requestURL }, options, { headers })
+			const authorization = authorizations.get(this) // can override this via options:Object's headers:Object
+			const requestURL = buildURL(uri, _.get(options, 'url')) // will use DEFAULT_ORIGIN if options.url undefined
+			const headers = Object.assign({ authorization }, JSON_REQUEST_HEADERS, _.get(options, 'headers')) // sensitive!
+			const request = Object.assign({ method: 'GET', page: true, retry: true }, options, { headers, url: requestURL })
 			if (typeof request.body === 'object') request.body = JSON.stringify(request.body)
-			const response = await this.fetch(requestURL, request)
+			const response = await this.fetch(request.url, request)
 			switch (response.status) {
 			case 200: // OK
 				if (!this.page || !request.page || !response.headers.has('link')) {
@@ -98,14 +102,14 @@ class SparkTools {
 		const [s, ns] = process.hrtime(hrtime)
 		// e.g. GET /v1/people/me => 200 OK (in 0.200s)
 		log.debug('fetch: %s %s => %s %s (in %ss)',
-			options.method || 'GET',
-			url || options.url || '/',
+			String(_.get(options, 'method', 'GET')),
+			url, // N.B. fetch ignores options.url
 			String(Number(response.status) || 0),
 			SparkError.statusMessage(response),
 			Number(s + ns / 1e9).toFixed(3),
 		)
 		if (response instanceof Error) throw response
-		return response
+		return response // may or may not be 200 OK
 	}
 
 	async addMembershipToTeam ({ personEmail }, team, isModerator = false) {
@@ -141,8 +145,8 @@ class SparkTools {
 	}
 
 	async getTeamMembership (person, team) {
-		const personUUID = decodeUUID(_.get(person, 'id', person))
-		const teamUUID = decodeUUID(_.get(team, 'id', team))
+		const personUUID = decodeID(_.get(person, 'id', person))
+		const teamUUID = decodeID(_.get(team, 'id', team))
 		const id = base64url(`ciscospark://us/TEAM_MEMBERSHIP/${personUUID}:${teamUUID}`)
 		return this.json(`/v1/team/memberships/${id}`)
 	}
@@ -161,13 +165,50 @@ class SparkTools {
 	}
 
 	async listTeamsModeratedByMe (...args) {
-		const me = await this.getPersonDetails()
+		const me = await this.getPersonDetails('me')
 		const teams = await this.findTeams(...args)
 		const isModerator = await Promise.all(teams.map(async (team) => {
 			const myTeamMembership = await this.getTeamMembership(me, team)
 			return myTeamMembership.isModerator // if false, team filtered out
 		}))
 		return teams.filter((team, index) => isModerator[index]).sort(MOST_RECENTLY_CREATED_FIRST)
+	}
+
+	async pingFeatureService (originURL = FEATURE_ORIGIN, pingURI = '/feature/api/v1/ping') {
+		const headers = Object.assign({ authorization: authorizations.get(this) || null }, JSON_REQUEST_HEADERS)
+		const response = await this.fetch(buildURL(pingURI, originURL), { headers })
+		if (!response.ok) throw new Error(await response.text())
+		// should probably parse response body for real status
+	}
+
+	async listDeveloperFeatures ({ keys = [], person = 'me' } = {}) {
+		const keyStrings = Array.from(keys, any => String(any || '')) // will be validated:
+		const keysUnique = Array.from(new Set(keyStrings.filter(nonEmpty => !!nonEmpty)))
+		if (keyStrings.length !== keysUnique.length) throw new Error('invalid feature names')
+		const headers = Object.assign({ authorization: authorizations.get(this) || null }, JSON_REQUEST_HEADERS)
+		const { id } = await this.getPersonDetails(person) // usually 'me' (for user's own developer feature flags)
+		const developerURL = buildURL(`/feature/api/v1/features/users/${decodeID(id)}/developer`, FEATURE_ORIGIN)
+		if (keysUnique.length === 0) {
+			const response = await this.fetch(developerURL, { headers }) // returns object w/ list of all toggles
+			if (!response.ok) throw new Error(`GET ${developerURL} => ${response.status} ${response.statusText}`)
+			const { featureToggles } = await response.json() // doesn't appear to support/require any page logic
+			return featureToggles
+		}
+		const fetchFeature = key => this.fetch(`${developerURL}/${key}`, { headers }).catch(error => error)
+		const responses = await Promise.all(Array.from(keysUnique, fetchFeature)) // send/recv req/res in parallel
+		if (!responses.some(response => !response.ok)) return Promise.all(responses.map(response => response.json()))
+		const responseMessages = responses.map(response => response instanceof Error ? response.message : response.statusText)
+		throw new Error(`GET ${developerURL}/{${keysUnique.join()}} => {${responseMessages.join()}} (one or more fetch failures)`)
+	}
+
+	async setDeveloperFeature (key, value = true, mutable = true, person = 'me') {
+		const { id } = await this.getPersonDetails(person) // usually 'me' (for own developer feature flags)
+		const developerURL = buildURL(`/feature/api/v1/features/users/${decodeID(id)}/developer`, FEATURE_ORIGIN)
+		const headers = Object.assign({ authorization: authorizations.get(this) || null }, JSON_REQUEST_HEADERS)
+		const body = { key: String(key || ''), mutable: String(JSON.parse(mutable)), val: String(value || 'false') }
+		const response = await this.fetch(developerURL, { body: JSON.stringify(body), headers, method: 'POST' })
+		if (response.ok) return response.json()
+		throw new Error(await response.text())
 	}
 
 	static fromAccessToken (token) {
