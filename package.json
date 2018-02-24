@@ -37,13 +37,14 @@
     "node": ">=8.0.0"
   },
   "keywords": [
+    "automation",
     "cisco",
-    "spark",
     "ciscospark",
-    "tool",
-    "tools",
-    "script",
-    "command"
+    "commander",
+    "commands",
+    "scripts",
+    "spark",
+    "tools"
   ],
   "nyc": {
     "exclude": [
@@ -56,13 +57,13 @@
   },
   "scripts": {
     "coverage": "nyc --reporter=html --reporter=text-summary mocha",
+    "cst": "node scripts",
     "eslint": "eslint .eslintrc.js scripts support test --report-unused-disable-directives",
-    "postinstall": "npm run script",
+    "postinstall": "npm run cst",
     "postreport": "npm run eslint -- --max-warnings 0",
     "prereport": "npm run eslint -- --fix",
     "report": "npm run coverage",
-    "script": "node scripts",
-    "start": "npm run script",
+    "start": "npm run cst",
     "test": "npm run report"
   }
 }
