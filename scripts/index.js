@@ -141,14 +141,11 @@ module.exports = ciscospark
 
 if (!module.parent) {
 	asyncParent(process)
-		/*
-		.then((tasks) => {
-			const all = tasks.parseCommands.args // Array, may have Command
+		.then(async (tasks) => {
+			const all = tasks.parseCommands.args // may have Command(s)
 			const noCommand = all.every(one => typeof one === 'string')
-			// TODO (tohagema): use chalk to decorate text in callback?
-			if (noCommand) ciscospark.outputHelp(text => text + '\n')
+			if (noCommand) await asyncChild(process, __filename, ['tutorial'])
 		})
-		*/
 		.catch((error) => {
 			/* eslint-disable no-console */
 			console.error()

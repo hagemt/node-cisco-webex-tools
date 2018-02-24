@@ -39,11 +39,16 @@ const getDisplayName = async () => {
 
 const inquireAccessToken = async () => {
 	const EXPLAIN_ACCESS_TOKEN = `
-\n\tIn order to perform actions on Cisco Spark, ${chalk.bold(`${packageJSON.name} requires an Access Token.`)}
-\n\tOne easy way to get an Access Token is from the developer portal: ${chalk.bold(DEVELOPER_PORTAL_URL)}
-\n\tLog in, and then click your avatar in the upper right-hand corner. Copy, and then paste into the prompt below.
-\n\tSecrets you provide to ${packageJSON.name} are kept safe in this folder: ${chalk.bold(DEFAULT_CONFIG_PATH)}
-`
+\t
+\tIn order to perform actions on Cisco Spark, ${chalk.bold(`${packageJSON.name} requires an Access Token.`)}
+\t
+\tOne easy way to get an Access Token is from the developer portal: ${chalk.bold(DEVELOPER_PORTAL_URL)}
+\t
+\tLog in, and then click your avatar in the upper right-hand corner. Copy, and then paste into the prompt below.
+\t
+\tSecrets you provide to ${packageJSON.name} are kept safe in this folder: ${chalk.bold(DEFAULT_CONFIG_PATH)}
+\t
+?`
 	const askAccessToken = Object.freeze({
 		message: 'Access Token:',
 		name: 'sparkAccessToken',

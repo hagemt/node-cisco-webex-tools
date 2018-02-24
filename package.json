@@ -1,6 +1,6 @@
 {
   "name": "ciscospark-tools",
-  "version": "0.4.0",
+  "version": "0.3.0",
   "author": "Tor E Hagemann <tor.hagemann@gmail.com>",
   "description": "Helps you grok Cisco Spark",
   "homepage": "https://github.com/hagemt/node-ciscospark-tools#readme",
@@ -59,7 +59,7 @@
     "coverage": "nyc --reporter=html --reporter=text-summary mocha",
     "cst": "node scripts",
     "eslint": "eslint .eslintrc.js scripts support test --report-unused-disable-directives",
-    "postinstall": "npm run cst",
+    "postinstall": "npm run cst -- tutorial",
     "postreport": "npm run eslint -- --max-warnings 0",
     "prereport": "npm run eslint -- --fix",
     "report": "npm run coverage",
