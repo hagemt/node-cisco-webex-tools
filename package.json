@@ -1,6 +1,6 @@
 {
   "name": "ciscospark-tools",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "author": "Tor E Hagemann <tor.hagemann@gmail.com>",
   "description": "Helps you grok Cisco Spark",
   "homepage": "https://github.com/hagemt/node-ciscospark-tools#readme",
