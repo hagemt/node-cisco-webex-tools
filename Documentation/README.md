@@ -1,10 +1,10 @@
 # ciscospark-tools
 
-Refer to the main README.md for now.
+Refer to the main README.md for now. Supplimental documentation goes in this folder.
 
-Supplimental documentation goes in this folder.
+Bonus: check out `spark.army.chainsaw.bash`, and consider adding it to your `~/.bashrc`, or similar.
 
-The `man` subdirectory contains compiled manual pages.
+The assumed shell is `bash` (but should be cross-compatible) with required commands: `base64`, `curl` and `jq`.
 
 ## Scripts API
 
@@ -54,9 +54,10 @@ Most code churn will be on the porcelian methods; the essential plumbing should 
 
 Here's where we should probably try to avoid a junkdrawer of sorts. Consider these existing async methods:
 
-* `addParticipantToTeam` (via email address and team ID; may specify whether or not to add as moderator)
+* `addMembershipToTeam` (via email address and team ID; may specify whether or not to add as moderator)
 * `createTeamAsModerator` (with a specified titular name; your user will be the team's only moderator)
 * `getPersonDetails` and `getTeamDetails` (provided an ID, or Object with .id; default person: "me")
-* `findTeams`, `findTeamMembership` and `findTeamsModeratedByMe` (useful for team onboarding, etc.)
+* `getTeamMembership`, `listDeveloperFeatures` and `setDeveloperFeature` do what they say on the tin
+* `listTeams`, `listTeamMemberships` and `listTeamsModeratedByMe` (useful for team onboarding, etc.)
 
 Add porcelian methods as needed, if one doesn't already exist. Try to compose where possible.
