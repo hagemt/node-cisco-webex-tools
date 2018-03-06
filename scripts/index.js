@@ -96,6 +96,14 @@ ciscospark.command('developer-features [key] [value]').alias('df')
 		await asyncChild(process, resolveScript('developer-features.js'), key, value)
 	})
 
+ciscospark.command('guest [iss] [secret] [email]').alias('jwt')
+	.description(chalk.blue('Compose a JWT token using Persistent Guest credentials and send a message on Spark'))
+	.option('-d, --debug', chalk.blue(`run guest with DEBUG=${packageJSON.name} (verbose mode)`))
+	.action(async (key, value, email, options) => {
+		if (options.debug) process.env.DEBUG = packageJSON.name + '*' // more verbose
+		await asyncChild(process, resolveScript('guest.js'), key, value, email)
+	})
+
 ciscospark.command('onboard-teams [email-rosters...]').alias('ot')
 	.description(chalk.blue('add participants to (new or) existing teams in bulk, using email rosters'))
 	.option('-d, --debug', chalk.blue(`run onboarding with DEBUG=${packageJSON.name} (verbose mode)`))
