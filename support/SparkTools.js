@@ -28,8 +28,8 @@ const JSON_HEADERS = Object.freeze({
 })
 
 const base64url = (...args) => {
-	const buffer = Buffer.from(...args).toString('base64')
-	return buffer.replace('+', '-').replace('/', '_').replace(/=+$/, '')
+	const buffer = Buffer.from(...args).toString('base64') // [+/=] => [-_]
+	return buffer.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 }
 
 const decodeID = (encoded, encoding = 'base64') => {
@@ -79,8 +79,8 @@ class SparkTools {
 			case 401: // Unauthorized
 				throw new SparkError('access token is invalid (get a new one from dev.ciscospark.com)')
 			case 429: // Too Many Requests
-				//if (!this.retry || !request.retry || !response.headers.has('retry-after')) { // sometimes missing?!
-				if (!this.retry || !request.retry) {
+			case 503: // Service Unavailable
+				if (!this.retry || !request.retry || !response.headers.has('retry-after')) {
 					throw new SparkError('sent Too Many Requests (according to Spark) and will not retry')
 				}
 				return SparkError.retryAfter(response.headers.get('retry-after'), async () => this.json(uri, options))
