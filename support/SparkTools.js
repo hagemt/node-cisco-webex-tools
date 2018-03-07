@@ -238,6 +238,25 @@ class SparkTools {
 		throw new Error(await response.text())
 	}
 
+	async jwtLogin(token) {
+		const jwtApiUrl = buildURL('/v1/jwt/login')
+		const headers = { Authorization: 'Bearer ' + token }
+		const response = await this.fetch(jwtApiUrl, {headers, method: 'POST'})
+		if (response.ok) return response.json()
+		throw new Error(await response.text())
+	}
+
+	async postMessageToEmail(email, markdown) {
+		log.debug('posting message to: %s', email)
+		return this.json('/v1/messages', {
+			body: {
+				toPersonEmail: email,
+				markdown: markdown
+			},
+			method: 'POST'
+		})
+	}
+
 	static fromAccessToken (token) {
 		return new SparkTools(token)
 	}
