@@ -28,6 +28,7 @@
     "eslint-plugin-mocha": "4.11.0",
     "eslint-plugin-node": "6.0.0",
     "mocha": "5.0.1",
+    "nock": "9.2.3",
     "nyc": "11.4.1"
   },
   "directories": {
@@ -56,13 +57,17 @@
     "url": "git+ssh://git@github.com/hagemt/node-ciscospark-tools.git"
   },
   "scripts": {
-    "coverage": "nyc --reporter=html --reporter=text-summary mocha",
+    "precoverage": "nyc -- npm run mocha",
+    "coverage": "nyc report --reporter=html",
+    "postcoverage": "nyc check-coverage --lines 0",
     "cst": "node scripts",
     "eslint": "eslint .eslintrc.js scripts support test --report-unused-disable-directives",
     "postinstall": "npm run cst -- tutorial",
-    "postreport": "npm run eslint -- --max-warnings 0",
+    "lint": "npm run eslint",
+    "mocha": "mocha test/**/*.js",
     "prereport": "npm run eslint -- --fix",
-    "report": "npm run coverage",
+    "report": "npm run coverage # run mocha w/ nyc",
+    "postreport": "npm run eslint -- --max-warnings 0",
     "start": "npm run cst",
     "test": "npm run report"
   }

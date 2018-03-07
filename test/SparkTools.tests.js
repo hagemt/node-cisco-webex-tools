@@ -1,16 +1,21 @@
 /* eslint-env mocha */
 const assert = require('assert')
+const UUID = require('uuid')
 
-const { Response } = require('node-fetch')
-const { v4: randomUUID } = require('uuid')
-
+// eslint-disable-next-line node/no-unpublished-require
+const nock = require('nock') // to mock HTTP requests
 const SparkTools = require('../support/SparkTools.js')
 
 describe('SparkTools', () => {
 
-	const newSparkTools = async (...args) => new SparkTools(...args)
+	const newSparkTools = async token => SparkTools.fromAccessToken(token)
 
-	describe('constructor', () => {
+	describe('.fromAccessToken', () => {
+
+		it('will return a unique instance of SparkTools', async () => {
+			const [one, two] = await Promise.all([newSparkTools('one'), newSparkTools('two')]) // unique
+			assert(one instanceof SparkTools && two instanceof SparkTools && one !== two, 'not unique')
+		})
 
 		it('will throw TypeError if not provided a Bearer token', async () => {
 			const error = await newSparkTools('').catch(thrownError => thrownError)
@@ -21,75 +26,60 @@ describe('SparkTools', () => {
 
 	})
 
-	describe('internals', () => {
-
-		const base64urlID = (middle, suffix = `/${randomUUID()}`, prefix = 'ciscospark://us/') => {
-			const id = Buffer.from([prefix, middle, suffix].join('')).toString('base64')
-			return id.replace('/', '_').replace('+', '-').replace(/=+$/, '')
+	const fakeResources = () => {
+		const base64url = (...args) => {
+			const id = Buffer.from(...args).toString('base64') // make URL safe:
+			return id.replace(/=+$/, '').replace(/\//g, '_').replace(/\+/g, '-')
 		}
-
-		const fakeResource = (type, id = base64urlID(type), ...args) => {
+		const fakeResource = (type, ...args) => {
+			const id = base64url(`ciscospark://us/${type}/${UUID.v4()}`)
 			const created = new Date().toISOString() // won't match UUID
 			return Object.freeze(Object.assign({ created, id }, ...args))
 		}
-
-		const fakeResources = () => {
-			// N.B. these are all strict subsets of real ones
-			const fakeMessage = fakeResource('MESSAGE', {
-				text: 'Fake Message',
-			})
-			const fakePerson = fakeResource('PERSON', {
-				displayName: 'Fake Person'
-			})
-			const fakeRoom = fakeResource('ROOM', {
-				title: 'Fake Room',
-			})
-			const fakeWebhook = fakeResource('WEBHOOK', {
-				name: 'Fake Webhook',
-			})
-			const fakeTeam = fakeResource('TEAM', {
-				name: 'Fake Team',
-			})
-			return {
-				membership: fakeResource('TEAM_MEMBERSHIP', {
-					personId: fakePerson.id,
-					teamId: fakeTeam.id,
-				}),
-				message: fakeMessage,
-				person: fakePerson,
-				room: fakeRoom,
-				team: fakeTeam,
-				webhook: fakeWebhook,
-			}
-		}
-
-		const fake = Object.assign({}, fakeResources(), {
-			token: 'usually CISCOSPARK_ACCESS_TOKEN',
+		// N.B. these are all strict subsets of real ones
+		const fakePerson = fakeResource('PERSON', {
+			displayName: 'Fake Person'
 		})
+		return {
+			person: fakePerson,
+		}
+	}
 
-		const okResponse = body => new Response(typeof body === 'string' ? body.slice() : JSON.stringify(body), { status: 200 })
+	describe('porcelian', () => {
+
+		const test = {
+			token: 'CISCOSPARK_ACCESS_TOKEN',
+		}
 
 		before(async () => {
-			fake.tools = await newSparkTools(fake.token)
-			fake.tools.fetch = async () => new Response()
+			nock.disableNetConnect()
 		})
 
-		it('#getPersonDetails defaults to GET /v1/people/me', async () => {
-			fake.tools.fetch = async () => okResponse(fake.person)
-			const person = await fake.tools.getPersonDetails()
-			assert.deepStrictEqual(person, fake.person)
-		})
+		describe('#getPersonDetails', () => {
 
-		const test = (inputJSON, methodName, ...args) => {
-			it(`#${methodName} (id: ${randomUUID()})`, async () => {
-				fake.tools.fetch = async () => okResponse(inputJSON)
-				const outputJSON = await fake.tools[methodName](...args)
-				assert.deepStrictEqual(inputJSON, outputJSON)
+			before(async () => {
+				Object.assign(test, fakeResources())
+				test.nock = nock('https://api.ciscospark.com')
+					.get(uri => uri === '/v1/people/me')
+					.reply(200, test.person)
+				test.tools = await newSparkTools(test.token)
 			})
-		}
 
-		test(fake.person, 'getPersonDetails', fake.person.id)
-		//test(fake.team, 'getTeamDetails', fake.team.id)
+			it('can get details on a person', async () => {
+				const person = await test.tools.getPersonDetails()
+				assert.deepStrictEqual(person, test.person)
+			})
+
+			after(() => {
+				test.nock.done()
+				nock.cleanAll()
+			})
+
+		})
+
+		after(async () => {
+			nock.enableNetConnect()
+		})
 
 	})
 

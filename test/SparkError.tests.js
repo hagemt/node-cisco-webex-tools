@@ -7,7 +7,7 @@ const SparkError = require('../support/SparkError.js')
 
 describe('SparkError', () => {
 
-	describe('fromResponse', () => {
+	describe('.fromResponse', () => {
 
 		it('can parse response from fetch', async () => {
 			const body = Object.freeze({
@@ -30,7 +30,7 @@ describe('SparkError', () => {
 
 	})
 
-	describe('retryAfter', () => {
+	describe('.retryAfter', () => {
 
 		it('runs the provided callback as delayed', (done) => {
 			SparkError.retryAfter(null, done)
