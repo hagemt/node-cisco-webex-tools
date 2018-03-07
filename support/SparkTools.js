@@ -94,10 +94,9 @@ class SparkTools {
 			const linkHeader = response.headers.get('link')
 			const nextURLs = /<(.+?)>; rel="next"/g.exec(linkHeader)
 			const nextURL = _.get(nextURLs, 1) // may be undefined
-			if (!nextURL) return { items: array } // done
+			if (!nextURL) return { items: array } // only page items
 			const next = await this.fetch(nextURL, {
-				// same Authorization, etc.
-				headers: request.headers,
+				headers: request.headers, // same auth, etc.
 			})
 			return this.page(next, request, array)
 		}
@@ -120,8 +119,11 @@ class SparkTools {
 		return response // may or may not be 200 OK
 	}
 
-	async addMembershipToTeam ({ personEmail }, team, isModerator = false) {
+	async addMembershipToTeam ({ personEmail }, team, ...args) {
+		const { isModerator } = Object.assign({}, ...args)
 		const teamId = _.get(team, 'id', team)
+		if (!teamId) throw new Error('missing team id')
+		if (!personEmail) throw new Error('missing person email')
 		log.debug('add (moderator: %s) participant (email: %s) to team (id: %s)',
 			isModerator ? 'true' : 'false',
 			personEmail,
@@ -134,6 +136,7 @@ class SparkTools {
 	}
 
 	async createTeamAsModerator ({ name }) {
+		if (!name) throw new Error('missing team name')
 		log.debug('create team (name: %s)', name)
 		return this.json('/v1/teams', {
 			body: { name },
@@ -143,24 +146,39 @@ class SparkTools {
 
 	async getPersonDetails (person = 'me') {
 		const id = _.get(person, 'id', person)
+		if (!id) throw new Error('missing person id')
 		return this.json(`/v1/people/${id}`)
 	}
 
 	async getTeamDetails (team) {
 		const id = _.get(team, 'id', team)
-		if (!id) throw new Error('no team.id')
+		if (!id) throw new Error('missing team id')
 		return this.json(`/v1/teams/${id}`)
 	}
 
 	async getTeamMembership (person, team) {
 		const personUUID = decodeID(_.get(person, 'id', person))
 		const teamUUID = decodeID(_.get(team, 'id', team))
+		if (!personUUID) throw new Error('missing person id')
+		if (!teamUUID) throw new Error('missing team id')
 		const id = base64url(`ciscospark://us/TEAM_MEMBERSHIP/${personUUID}:${teamUUID}`)
 		return this.json(`/v1/team/memberships/${id}`)
 	}
 
+	async listPeople (...args) {
+		const options = Object.assign({ max: MAX_PAGE_SIZE }, ...args)
+		if (Array.isArray(options.id)) options.id = options.id.join(',')
+		const supported = ['displayName', 'email', 'id'].concat(QUERY_OPTIONS)
+		const query = querystring.stringify(_.pick(options, supported))
+		log.debug('list people (search query string: %s)', query)
+		const { items } = await this.json(`/v1/people?${query}`)
+		return items
+	}
+
 	async listTeamMemberships (team) {
+		// should team be optional argument?
 		const teamId = _.get(team, 'id', team)
+		if (!teamId) throw new Error('missing team id')
 		const query = querystring.stringify({ max: MAX_PAGE_SIZE, teamId })
 		const { items } = await this.json(`/v1/team/memberships?${query}`)
 		return items
