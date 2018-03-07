@@ -15,8 +15,8 @@ const RAINBOW = Object.freeze(['red', 'yellow', 'green', 'cyan', 'blue', 'magent
 const rainbow = (string, number) => chalk[RAINBOW[number % RAINBOW.length]](string || '')
 chalk.rainbow = letters => Array.from(letters, (letter, i) => rainbow(letter, i)).join('')
 
-const GREETING = Object.freeze(['You are the best.', 'You are one of a kind.']) // add to taste
-const greeting = (r = Math.random()) => chalk.rainbow(GREETING[Math.floor(r * GREETING.length)])
+const FLATTERY = Object.freeze(['You are the best.', 'You are one of a kind.']) // add to taste
+const flattery = (r = Math.random()) => chalk.rainbow(FLATTERY[Math.floor(r * FLATTERY.length)])
 
 const BOT_EMAIL_ROSTER = path.resolve(__dirname, '..', 'rosters', 'demo.txt')
 const DEFAULT_CONFIG_PATH = path.resolve(os.homedir(), `.${packageJSON.name}`)
@@ -104,6 +104,7 @@ if (!module.parent) {
 
 			const demoCommand = chalk.bold(`${packageJSON.name} onboard-teams ${chalk.red(BOT_EMAIL_ROSTER)}`)
 			const envCommand = chalk.bold(`CISCOSPARK_ACCESS_TOKEN=${chalk.red('PASTE_ACCESS_TOKEN_HERE')}`)
+			const installCommand = chalk.bold(`npm install -g ${packageJSON.name}@latest`) // good advice
 
 			const initialUNIX = `In your .bashrc (or similar) add a line similar to this: export ${envCommand}`
 			const initialWindows = `In the environment where you run ${packageJSON.name}: set ${envCommand}`
@@ -112,11 +113,11 @@ if (!module.parent) {
 			const helperText = 'Feel free to run the tutorial whenever something is unclear. I am here to help you!'
 			const initialText = INITIAL_INSTRUCTIONS + (process.platform === 'win32' ? initialWindows : initialUNIX)
 			const normalText = 'Check teams in your Spark client (after running this command) for a quick demonstration:'
-			const updateText = `Tip: use ${chalk.bold(`npm up -g ${packageJSON.name}`)} to install the latest version.`
+			const updateText = `Tip: use ${installCommand} to install to the latest version, which may change behavior.`
 
 			/* eslint-disable no-console */
 			console.log()
-			console.log('\t' + chalk.green(greetingText) + ' ' + chalk.bold(greeting()))
+			console.log('\t' + chalk.green(greetingText) + ' ' + chalk.bold(flattery()))
 			console.log()
 			console.log('\t' + chalk.yellow(displayName ? normalText : helperText))
 			console.log()
