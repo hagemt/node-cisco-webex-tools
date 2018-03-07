@@ -90,10 +90,12 @@ ciscospark.version(packageJSON.version || 'unknown', '-v, --version')
 
 ciscospark.command('developer-features [key] [value]').alias('df')
 	.description(chalk.blue('list/get/set which functionality your user has toggled (enabled/disabled)'))
-	.option('-d, --debug', chalk.blue(`run toggle(s) with DEBUG=${packageJSON.name} (verbose mode)`))
+	.option('-d, --debug', chalk.blue(`toggle (get/set) with DEBUG=${packageJSON.name} (verbose mode)`))
+	.option('-u, --user <email|id>', chalk.blue('toogle (get/set) for a different user (support mode)'))
 	.action(async (key, value, options) => {
-		if (options.debug) process.env.DEBUG = packageJSON.name + '*' // more verbose
-		await asyncChild(process, resolveScript('developer-features.js'), key, value)
+		if (options.debug) process.env.DEBUG = packageJSON.name + '*'
+		const args = [options.user || 'me', key, value].filter(optional => !!optional)
+		await asyncChild(process, resolveScript('developer-features.js'), ...args)
 	})
 
 ciscospark.command('onboard-teams [email-rosters...]').alias('ot')
@@ -110,7 +112,7 @@ ciscospark.command('onboard-teams [email-rosters...]').alias('ot')
 
 ciscospark.command('tutorial [args...]').alias('help')
 	.description(chalk.green(`if you're new to ${packageJSON.name} (or want to learn more) get started here!`))
-	.option('-d, --debug', chalk.blue(`run onboarding with DEBUG=${packageJSON.name} (verbose mode)`))
+	.option('-d, --debug', chalk.blue(`run tutorial with DEBUG=${packageJSON.name} (verbose mode)`))
 	.action(async (args, options) => {
 		if (options.debug) process.env.DEBUG = packageJSON.name + '*'
 		// args might specify specific tutorials, or set(s) of tutorials
