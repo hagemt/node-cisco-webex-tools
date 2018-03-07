@@ -6,17 +6,25 @@ const fetch = require('node-fetch')
 
 const log = require('./log.js')
 const SparkError = require('./SparkError.js')
+const PACKAGE_JSON = require('../package.json')
 
 const DEFAULT_ORIGIN = process.env.CISCOSPARK_URL_ORIGIN || 'https://api.ciscospark.com'
 const buildURL = (uri, origin = DEFAULT_ORIGIN) => new url.URL(uri, origin).toString()
 
+const USER_AGENT_PREFIX = `${PACKAGE_JSON.name}/${PACKAGE_JSON.version} (+${PACKAGE_JSON.bugs.url})`
+const USER_AGENT_SUFFIX = `${process.release.name}/${process.version} ${process.platform}/${process.arch}`
+
 const QUERY_OPTIONS = Object.freeze(['max'])
 const MAX_PAGE_SIZE = 1000 // default ?max=
 
-const JSON_MEDIA_TYPE = 'application/json'
-const JSON_REQUEST_HEADERS = Object.freeze({
-	'accept': JSON_MEDIA_TYPE,
-	'content-type': JSON_MEDIA_TYPE,
+const DEFAULT_HEADERS = Object.freeze({
+	'user-agent': `${USER_AGENT_PREFIX} ${USER_AGENT_SUFFIX}`,
+})
+
+const JSON_MIME = 'application/json'
+const JSON_HEADERS = Object.freeze({
+	'accept': JSON_MIME,
+	'content-type': JSON_MIME,
 })
 
 const base64url = (...args) => {
@@ -54,7 +62,7 @@ class SparkTools {
 		this.json = async (uri, options) => {
 			const authorization = authorizations.get(this) // can override this via options:Object's headers:Object
 			const requestURL = buildURL(uri, _.get(options, 'url')) // will use DEFAULT_ORIGIN if options.url undefined
-			const headers = Object.assign({ authorization }, JSON_REQUEST_HEADERS, _.get(options, 'headers')) // sensitive!
+			const headers = Object.assign({ authorization }, DEFAULT_HEADERS, JSON_HEADERS, _.get(options, 'headers'))
 			const request = Object.assign({ method: 'GET', page: true, retry: true }, options, { headers, url: requestURL })
 			if (typeof request.body === 'object') request.body = JSON.stringify(request.body)
 			const response = await this.fetch(request.url, request)
@@ -176,17 +184,17 @@ class SparkTools {
 	}
 
 	async pingFeatureService (originURL = FEATURE_ORIGIN, pingURI = '/feature/api/v1/ping') {
-		const headers = Object.assign({ authorization: authorizations.get(this) || null }, JSON_REQUEST_HEADERS)
+		const headers = Object.assign({ authorization: authorizations.get(this) }, DEFAULT_HEADERS, JSON_HEADERS)
 		const response = await this.fetch(buildURL(pingURI, originURL), { headers })
 		if (!response.ok) throw new Error(await response.text())
 		// should probably parse response body for real status
 	}
 
-	async listDeveloperFeatures ({ keys = [], person = 'me' } = {}) {
+	async listDeveloperFeatures (keys = [], person = 'me') {
 		const keyStrings = Array.from(keys, any => String(any || '')) // will be validated:
 		const keysUnique = Array.from(new Set(keyStrings.filter(nonEmpty => !!nonEmpty)))
 		if (keyStrings.length !== keysUnique.length) throw new Error('invalid feature names')
-		const headers = Object.assign({ authorization: authorizations.get(this) || null }, JSON_REQUEST_HEADERS)
+		const headers = Object.assign({ authorization: authorizations.get(this) }, DEFAULT_HEADERS, JSON_HEADERS)
 		const { id } = await this.getPersonDetails(person) // usually 'me' (for user's own developer feature flags)
 		const developerURL = buildURL(`/feature/api/v1/features/users/${decodeID(id)}/developer`, FEATURE_ORIGIN)
 		if (keysUnique.length === 0) {
@@ -205,8 +213,8 @@ class SparkTools {
 	async setDeveloperFeature (key, value = true, mutable = true, person = 'me') {
 		const { id } = await this.getPersonDetails(person) // usually 'me' (for own developer feature flags)
 		const developerURL = buildURL(`/feature/api/v1/features/users/${decodeID(id)}/developer`, FEATURE_ORIGIN)
-		const headers = Object.assign({ authorization: authorizations.get(this) || null }, JSON_REQUEST_HEADERS)
-		const body = { key: String(key || ''), mutable: String(JSON.parse(mutable)), val: String(value || 'false') }
+		const headers = Object.assign({ authorization: authorizations.get(this) }, DEFAULT_HEADERS, JSON_HEADERS)
+		const body = { key: String(key || ''), mutable: String(mutable || false), val: String(value || false) }
 		const response = await this.fetch(developerURL, { body: JSON.stringify(body), headers, method: 'POST' })
 		if (response.ok) return response.json()
 		throw new Error(await response.text())
