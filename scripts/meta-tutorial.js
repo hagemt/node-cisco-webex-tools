@@ -13,10 +13,10 @@ const SparkTools = require('../support/SparkTools.js')
 
 const RAINBOW = Object.freeze(['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'])
 const rainbow = (string, number) => chalk[RAINBOW[number % RAINBOW.length]](string || '')
-chalk.rainbow = letters => Array.from(letters, (letter, i) => rainbow(letter, i)).join('')
+chalk.rainbow = letters => Array.from(letters, (letter, index) => rainbow(letter, index)).join('')
 
-const FLATTERY = Object.freeze(['You are the best.', 'You are one of a kind.']) // add to taste
-const flattery = (r = Math.random()) => chalk.rainbow(FLATTERY[Math.floor(r * FLATTERY.length)])
+const FLATTERY = Object.freeze(['You are one of a kind.', 'Everyone appreciates you.', 'The world is better with you in it.'])
+const flattery = (array = FLATTERY, index = Math.floor(Math.random() * array.length)) => chalk.rainbow(array[index])
 
 const BOT_EMAIL_ROSTER = path.resolve(__dirname, '..', 'rosters', 'demo.txt')
 const DEFAULT_CONFIG_PATH = path.resolve(os.homedir(), `.${packageJSON.name}`)
@@ -72,7 +72,7 @@ const saveAuthorization = async (authorization) => {
 	const hasDirectory = fs.existsSync(DEFAULT_CONFIG_PATH) && fs.lstatSync(DEFAULT_CONFIG_PATH).isDirectory()
 	if (!hasDirectory) fs.mkdirSync(DEFAULT_CONFIG_PATH) // make backup of any existing secrets.json for safety:
 	if (fs.existsSync(SECRETS_JSON_PATH)) fs.renameSync(SECRETS_JSON_PATH, `${SECRETS_JSON_PATH}.${Date.now()}`)
-	fs.writeFileSync(SECRETS_JSON_PATH, JSON.stringify({ authorization }, null, '\t') + '\n', { mode: 0o600 })
+	fs.writeFileSync(SECRETS_JSON_PATH, `${JSON.stringify({ authorization }, null, '\t')}\n`, { mode: 0o600 })
 	log.debug('saved Authorization to file: %s', SECRETS_JSON_PATH)
 }
 
@@ -111,19 +111,19 @@ if (!module.parent) {
 
 			const greetingText = `Thanks for using ${packageJSON.name}, ${displayName || 'intrepid explorer'}!`
 			const helperText = 'Feel free to run the tutorial whenever something is unclear. I am here to help you!'
-			const initialText = INITIAL_INSTRUCTIONS + (process.platform === 'win32' ? initialWindows : initialUNIX)
+			const initialText = `${INITIAL_INSTRUCTIONS} ${process.platform === 'win32' ? initialWindows : initialUNIX}`
 			const normalText = 'Check teams in your Spark client (after running this command) for a quick demonstration:'
-			const updateText = `Tip: use ${installCommand} to install to the latest version, which may change behavior.`
+			const updateText = `Tip: use ${installCommand} to update, which may change behavior.`
 
 			/* eslint-disable no-console */
 			console.log()
-			console.log('\t' + chalk.green(greetingText) + ' ' + chalk.bold(flattery()))
+			console.log(`\t${chalk.green(greetingText)} ${chalk.bold(flattery())}`)
 			console.log()
-			console.log('\t' + chalk.yellow(displayName ? normalText : helperText))
+			console.log(`\t${chalk.yellow(displayName ? normalText : helperText)}`)
 			console.log()
-			console.log('\t' + (displayName ? demoCommand : initialText))
+			console.log(`\t${displayName ? demoCommand : initialText}`)
 			console.log()
-			console.log('\t' + chalk.blue(updateText))
+			console.log(`\t${chalk.blue(updateText)}`)
 			console.log()
 			/* eslint-enable no-console */
 

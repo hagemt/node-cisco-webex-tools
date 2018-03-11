@@ -63,7 +63,7 @@ const parseRoster = async (filename, encoding = 'utf8') => {
 // onboardTeams:AsyncFunction :: (files:Object, token:String, ...flags) => rosters:Map
 // does the leg-work of onboarding Spark Teams, provided a set of roster files to parse
 const onboardTeams = async (teamRosterFiles, userAccessToken, isDryRun, noPrompts) => {
-	const delay = async (...args) => await new Promise(done => setTimeout(done, ...args))
+	const delay = async (...args) => new Promise(done => setTimeout(done, ...args))
 	const spark = SparkTools.fromAccessToken(userAccessToken)
 	const onboardTeam = async ({ id, name }, ...personEmails) => {
 		const createTeam = !!name && !id // will create a new team when only the name is provided (no team ID)

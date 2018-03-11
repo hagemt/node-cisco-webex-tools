@@ -1,25 +1,24 @@
-const querystring = require('querystring')
-const url = require('url')
+const { URL } = require('url')
 
 const _ = require('lodash')
 const fetch = require('node-fetch')
 
-const log = require('./log.js')
-const SparkError = require('./SparkError.js')
+const log = require('./log.js') // DEBUG support
 const PACKAGE_JSON = require('../package.json')
-
-const DEFAULT_ORIGIN = process.env.CISCOSPARK_URL_ORIGIN || 'https://api.ciscospark.com'
-const buildURL = (uri, origin = DEFAULT_ORIGIN) => new url.URL(uri, origin).toString()
+const SparkError = require('./SparkError.js')
+const validation = require('./validation.js')
 
 const USER_AGENT_PREFIX = `${PACKAGE_JSON.name}/${PACKAGE_JSON.version} (+${PACKAGE_JSON.bugs.url})`
 const USER_AGENT_SUFFIX = `${process.release.name}/${process.version} ${process.platform}/${process.arch}`
 
-const QUERY_OPTIONS = Object.freeze(['max'])
-const MAX_PAGE_SIZE = 1000 // default ?max=
-
 const DEFAULT_HEADERS = Object.freeze({
 	'user-agent': `${USER_AGENT_PREFIX} ${USER_AGENT_SUFFIX}`,
 })
+
+const { CISCOSPARK_ACCESS_TOKEN, CISCOSPARK_URL_ORIGIN } = Object(process.env)
+const DEFAULT_ORIGIN = String(CISCOSPARK_URL_ORIGIN || 'https://api.ciscospark.com')
+const FEATURE_ORIGIN = process.env.FEATURE_ORIGIN || 'https://feature.a6.ciscospark.com'
+const buildURL = (string, origin = DEFAULT_ORIGIN) => new URL(string, origin).toString()
 
 const JSON_MIME = 'application/json'
 const JSON_HEADERS = Object.freeze({
@@ -37,10 +36,9 @@ const decodeID = (encoded, encoding = 'base64') => {
 	return decoded.slice(decoded.lastIndexOf('/') + 1)
 }
 
+const authorizations = new WeakMap() // private mechanism to obtain the secret used, given an instance
 const createdDate = ({ created }) => created ? new Date(created) : new Date() // default: now
 const MOST_RECENTLY_CREATED_FIRST = (lhs, rhs) => Math.sign(createdDate(rhs) - createdDate(lhs))
-const authorizations = new WeakMap() // private mechanism to obtain the secret used, given an instance
-const FEATURE_ORIGIN = process.env.CISCOSPARK_URL_ORIGIN_FEATURE || 'https://feature.a6.ciscospark.com'
 
 /**
  * Make requests and parse responses from public Spark APIs. Add methods to support scripts.
@@ -54,7 +52,7 @@ const FEATURE_ORIGIN = process.env.CISCOSPARK_URL_ORIGIN_FEATURE || 'https://fea
 class SparkTools {
 
 	// constructor signature is volatile; use static factory methods
-	constructor (userAccessToken = process.env.CISCOSPARK_ACCESS_TOKEN) {
+	constructor (userAccessToken = CISCOSPARK_ACCESS_TOKEN) {
 		if (!userAccessToken || typeof userAccessToken !== 'string') {
 			throw new TypeError('export CISCOSPARK_ACCESS_TOKEN=... # from dev.ciscospark.com')
 		}
@@ -88,6 +86,7 @@ class SparkTools {
 				throw await SparkError.fromResponse(response).catch(nonSparkError => nonSparkError)
 			}
 		}
+		this.log = (format, ...args) => log.debug(format, ...args)
 		this.page = async (response, request, array = []) => {
 			const { items } = await response.json()
 			for (const item of items) array.push(item)
@@ -108,7 +107,8 @@ class SparkTools {
 		const response = await fetch(url, options).catch(error => error)
 		const [s, ns] = process.hrtime(hrtime)
 		// e.g. GET /v1/people/me => 200 OK (in 0.200s)
-		log.debug('fetch: %s %s => %s %s (in %ss)',
+		this.log(
+			'fetch: %s %s => %s %s (in %ss)',
 			String(_.get(options, 'method', 'GET')),
 			url, // N.B. fetch ignores options.url
 			String(Number(response.status) || 0),
@@ -124,7 +124,8 @@ class SparkTools {
 		const teamId = _.get(team, 'id', team)
 		if (!teamId) throw new Error('missing team id')
 		if (!personEmail) throw new Error('missing person email')
-		log.debug('add (moderator: %s) participant (email: %s) to team (id: %s)',
+		this.log(
+			'add (moderator: %s) participant (email: %s) to team (id: %s)',
 			isModerator ? 'true' : 'false',
 			personEmail,
 			teamId,
@@ -137,7 +138,7 @@ class SparkTools {
 
 	async createTeamAsModerator ({ name }) {
 		if (!name) throw new Error('missing team name')
-		log.debug('create team (name: %s)', name)
+		this.log('create team (name: %s)', name)
 		return this.json('/v1/teams', {
 			body: { name },
 			method: 'POST',
@@ -165,29 +166,74 @@ class SparkTools {
 		return this.json(`/v1/team/memberships/${id}`)
 	}
 
-	async listPeople (...args) {
-		const options = Object.assign({ max: MAX_PAGE_SIZE }, ...args)
-		if (Array.isArray(options.id)) options.id = options.id.join(',')
-		const supported = ['displayName', 'email', 'id'].concat(QUERY_OPTIONS)
-		const query = querystring.stringify(_.pick(options, supported))
-		log.debug('list people (search query string: %s)', query)
-		const { items } = await this.json(`/v1/people?${query}`)
+	async listEvents (...args) {
+		const input = Object.assign({ max: 1000 }, ...args)
+		const uri = validation.buildURI('/v1/events', input)
+		const options = _.pick(input, ['page', 'retry'])
+		const { items } = await this.json(uri, options)
 		return items
 	}
 
-	async listTeamMemberships (team) {
-		// should team be optional argument?
-		const teamId = _.get(team, 'id', team)
-		if (!teamId) throw new Error('missing team id')
-		const query = querystring.stringify({ max: MAX_PAGE_SIZE, teamId })
-		const { items } = await this.json(`/v1/team/memberships?${query}`)
+	async listMemberships (...args) {
+		return this.listSpaceMemberships(...args)
+	}
+
+	async listMessages (space, ...args) {
+		const roomId = _.get(space, 'space.id', _.get(space, 'id', space))
+		const input = Object.assign({ max: 1000, roomId }, ...args)
+		const uri = validation.buildURI('/v1/messages', input)
+		const options = _.pick(input, ['page', 'retry'])
+		const { items } = await this.json(uri, options)
+		return items
+	}
+
+	async listPeople (...args) {
+		const input = Object.assign({ max: 1000 }, ...args)
+		const uri = validation.buildURI('/v1/people', input)
+		const options = _.pick(input, ['page', 'retry'])
+		const { items } = await this.json(uri, options)
+		return items
+	}
+
+	async listSpaceMemberships (space, ...args) {
+		const roomId = _.get(space, 'space.id', _.get(space, 'id', space))
+		const input = Object.assign({ max: 1000, roomId }, ...args)
+		const uri = validation.buildURI('/v1/memberships', input)
+		const options = _.pick(input, ['page', 'retry'])
+		const { items } = await this.json(uri, options)
+		return items
+	}
+
+	async listSpaces (...args) {
+		const input = Object.assign({ max: 1000 }, ...args)
+		const uri = validation.buildURI('/v1/rooms', input)
+		const options = _.pick(input, ['page', 'retry'])
+		const { items } = await this.json(uri, options)
+		return items
+	}
+
+	async listTeamMemberships (team, ...args) {
+		const teamId = _.get(team, 'team.id', _.get(team, 'id', team))
+		const input = Object.assign({ max: 1000, teamId }, ...args)
+		const uri = validation.buildURI('/v1/team/memberships', input)
+		const options = _.pick(input, ['page', 'retry'])
+		const { items } = await this.json(uri, options)
 		return items
 	}
 
 	async listTeams (...args) {
-		const options = Object.assign({ max: MAX_PAGE_SIZE }, ...args)
-		const query = querystring.stringify(_.pick(options, QUERY_OPTIONS))
-		const { items } = await this.json(`/v1/teams?${query}`)
+		const input = Object.assign({ max: 1000 }, ...args)
+		const uri = validation.buildURI('/v1/teams', input)
+		const options = _.pick(input, ['page', 'retry'])
+		const { items } = await this.json(uri, options)
+		return items
+	}
+
+	async listWebhooks (...args) {
+		const input = Object.assign({ max: 100 }, ...args)
+		const uri = validation.buildURI('/v1/webhooks', input)
+		const options = _.pick(input, ['page', 'retry'])
+		const { items } = await this.json(uri, options)
 		return items
 	}
 
@@ -238,22 +284,23 @@ class SparkTools {
 		throw new Error(await response.text())
 	}
 
-	async jwtLogin(token) {
-		const jwtApiUrl = buildURL('/v1/jwt/login')
-		const headers = { Authorization: 'Bearer ' + token }
-		const response = await this.fetch(jwtApiUrl, {headers, method: 'POST'})
+	async jwtLogin (token) {
+		const response = await this.fetch(buildURL('/v1/jwt/login'), {
+			headers: { authorization: `Bearer ${token}` },
+			method: 'POST',
+		})
 		if (response.ok) return response.json()
 		throw new Error(await response.text())
 	}
 
-	async postMessageToEmail(email, markdown) {
-		log.debug('posting message to: %s', email)
+	async postMessageToEmail (email, message) {
+		this.log('posting message to: %s', email)
 		return this.json('/v1/messages', {
 			body: {
+				markdown: message,
 				toPersonEmail: email,
-				markdown: markdown
 			},
-			method: 'POST'
+			method: 'POST',
 		})
 	}
 

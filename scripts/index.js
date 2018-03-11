@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+
 const ChildProcess = require('child_process')
 const FS = require('fs')
 const OS = require('os')
@@ -8,13 +9,6 @@ const chalk = require('chalk')
 const ciscospark = require('commander')
 const fetchResponse = require('node-fetch')
 const packageJSON = require('../package.json')
-
-const npmPackage = async (packageName = packageJSON.name) => {
-	const packageURL = `https://registry.npmjs.org/${packageName}`
-	const response = await fetchResponse(packageURL) // may throw
-	if (response.ok) return response.json() // has .dist-tags.latest
-	else throw new Error(`failed to fetch JSON from GET ${packageURL}`)
-}
 
 const resolveScript = (...args) => Path.resolve(__dirname, ...args)
 const defaultReason = new Error('Abnormal script termination!')
@@ -54,17 +48,16 @@ const asyncParent = async (parent, env = parent.env) => {
 		if (token) env.CISCOSPARK_ACCESS_TOKEN = token
 		else throw new Error('missing access token')
 	}
-	// non-invasive, single-request method to check NPM for latest CST:
-	const newerVersion = async (packageVersion = packageJSON.version) => {
-		if (Math.random() < 0.90) return Promise.resolve() // usually no operation
-		const newer = ({ 'dist-tags': { latest } }) => (latest !== packageVersion)
-		return new Promise((resolve, reject) => { // otherwise, check NPM quickly:
-			const timeout = setTimeout(reject, 1000, new Error('hit 1s timeout'))
-			const clear = done => any => { clearTimeout(timeout); done(any) }
-			npmPackage().then(newer).then(clear(resolve), clear(reject))
-		})
+	const newerVersion = async () => { // non-invasive (max 1s) update check
+		if (Math.random() < 0.9) return // no-op usually, only check w/ p=10%
+		const packageURL = `https://registry.npmjs.org/${packageJSON.name}`
+		const response = await fetchResponse(packageURL, { timeout: 1000 })
+		if (!response.ok) throw new Error(`failed: GET ${packageURL}`)
+		const { 'dist-tags': { latest } } = await response.json()
+		if (latest === packageJSON.version) return // no update
+		return latest // eslint-disable-line consistent-return
 	}
-	parent.exitCode = 0 // explicit optimistic outcome(s)
+	parent.exitCode = 0 // explicitly optimistic outcome(s):
 	const tasks = {
 		newerVersion: await newerVersion().catch(error => error),
 		setupSecrets: await setupSecrets().catch(error => error),
@@ -85,35 +78,44 @@ const asyncParent = async (parent, env = parent.env) => {
 	})
 }
 
+// eslint-disable-next-line no-underscore-dangle
 ciscospark._name = chalk.bold(packageJSON.name || 'ciscospark-tools')
 ciscospark.version(packageJSON.version || 'unknown', '-v, --version')
 
 ciscospark.command('developer-features [key] [value]').alias('df')
-	.description(chalk.blue('list/get/set which functionality your user has toggled (enabled/disabled)'))
+	.description(chalk.blue('list/get/set which special functionality your user has toggled (enabled/disabled)'))
 	.option('-d, --debug', chalk.blue(`toggle (get/set) with DEBUG=${packageJSON.name} (verbose mode)`))
 	.option('-u, --user <email|id>', chalk.blue('toogle (get/set) for a different user (support mode)'))
 	.action(async (key, value, options) => {
-		if (options.debug) process.env.DEBUG = packageJSON.name + '*'
+		if (options.debug) process.env.DEBUG = packageJSON.name // more verbose
 		const args = [options.user || 'me', key, value].filter(optional => !!optional)
 		await asyncChild(process, resolveScript('developer-features.js'), ...args)
 	})
 
+ciscospark.command('export-data').alias('ed')
+	.description(chalk.blue('exfiltrate all messages from your spaces to disk in a structured data format (JSON)'))
+	.option('-d, --debug', chalk.blue(`run guest with DEBUG=${packageJSON.name} (verbose mode)`))
+	.action(async (options) => {
+		if (options.debug) process.env.DEBUG = packageJSON.name
+		await asyncChild(process, resolveScript('export-data.js'))
+	})
+
 ciscospark.command('guest-credentials <issuer> <secret> [email]').alias('guest')
-	.description(chalk.blue('Compose a JWT token using Persistent Guest credentials and send a message on Spark'))
+	.description(chalk.blue('compose a JWT token using Persistent Guest credentials and send a message on Spark'))
 	.option('-d, --debug', chalk.blue(`run guest with DEBUG=${packageJSON.name} (verbose mode)`))
 	.action(async (issuer, secret, email, options) => {
-		if (options.debug) process.env.DEBUG = packageJSON.name + '*' // more verbose
+		if (options.debug) process.env.DEBUG = packageJSON.name // more verbose
 		await asyncChild(process, resolveScript('guest.js'), issuer, secret, email)
 	})
 
-ciscospark.command('onboard-teams [email-rosters...]').alias('ot')
-	.description(chalk.blue('add participants to (new or) existing teams in bulk, using email rosters'))
+ciscospark.command('onboard-teams [roster-files...]').alias('ot')
+	.description(chalk.blue('add participants to (new or) existing teams in bulk, using rosters (email lists)'))
 	.option('-d, --debug', chalk.blue(`run onboarding with DEBUG=${packageJSON.name} (verbose mode)`))
 	.option('-n, --dry-run', chalk.blue('skip actual team manipulation; instead, print email rosters'))
 	.option('-y, --no-interactive', chalk.blue('skip all prompts (for which team, team names, etc.)'))
 	.action(async (args, options) => {
-		if (options.debug) process.env.DEBUG = packageJSON.name + '*' // more verbose
-		if (options.dryRun) process.env.DRY_RUN = 'true' // skip all write operations
+		if (options.debug) process.env.DEBUG = packageJSON.name // more verbose
+		if (options.dryRun) process.env.DRY_RUN = 'true' // skip write operations
 		if (!options.interactive) process.env.NO_PROMPTS = 'true' // skip inquirer
 		await asyncChild(process, resolveScript('onboard-teams.js'), ...args)
 	})
@@ -122,7 +124,7 @@ ciscospark.command('tutorial [args...]').alias('help')
 	.description(chalk.green(`if you're new to ${packageJSON.name} (or want to learn more) get started here!`))
 	.option('-d, --debug', chalk.blue(`run tutorial with DEBUG=${packageJSON.name} (verbose mode)`))
 	.action(async (args, options) => {
-		if (options.debug) process.env.DEBUG = packageJSON.name + '*'
+		if (options.debug) process.env.DEBUG = packageJSON.name
 		// args might specify specific tutorials, or set(s) of tutorials
 		await asyncChild(process, resolveScript('meta-tutorial.js'), args)
 		ciscospark.outputHelp() // will print before tutorial is complete
@@ -150,14 +152,18 @@ if (process.env.NODE_ENV === 'test') {
 module.exports = ciscospark
 
 if (!module.parent) {
+	/* eslint-disable no-console */
 	asyncParent(process)
-		.then(async (tasks) => {
-			const all = tasks.parseCommands.args // may have Command(s)
-			const noCommand = all.every(one => typeof one === 'string')
-			if (noCommand) await asyncChild(process, __filename, ['tutorial'])
+		.then(async ({ newerVersion, parseCommands, setupSecrets }) => {
+			// this method for determination of a command being run is sometimes unreliable:
+			const noCommands = parseCommands.args.every(one => typeof one === 'string')
+			if (noCommands || setupSecrets instanceof Error) {
+				await asyncChild(process, __filename, ['tutorial']) // output from child is printed last, for some reason
+				const update = newerVersion && !(newerVersion instanceof Error) ? `${packageJSON.version} vs. ${newerVersion}` : ''
+				if (update) console.error(chalk.bold(`\n\tN.B. an update for ${packageJSON.name} is available (${update})`))
+			}
 		})
 		.catch((error) => {
-			/* eslint-disable no-console */
 			console.error()
 			console.error(Object.assign(error, { message: chalk.red(error.message || 'no error message provided') }))
 			console.error()
@@ -167,7 +173,6 @@ if (!module.parent) {
 			console.error()
 			console.error(chalk.yellow(`\t${packageJSON.bugs.url}`))
 			console.error()
-			/* eslint-enable no-console */
 			process.exitCode = 1
 		})
 }

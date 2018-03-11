@@ -92,9 +92,10 @@ const rewriteError = ({ message: oldMessage, stack }) => {
 
 const rewriteURI = (baseURI, queryOptions, defaultScheme) => {
 	const scheme = _.get(buildSchema(), baseURI, defaultScheme)
+	if (!scheme) return baseURI // no query options to validate
 	const { error, value } = joi.validate(queryOptions, scheme)
-	if (error) throw rewriteError(error) // can joi be customized?
-	return `${baseURI}?${querystring.stringify(value)}` // join?
+	if (error) throw rewriteError(error) // use joi options?
+	return `${baseURI}?${querystring.stringify(value)}`
 }
 
 module.exports = {

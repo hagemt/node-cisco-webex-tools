@@ -38,7 +38,7 @@ describe('SparkTools', () => {
 		}
 		// N.B. these are all strict subsets of real ones
 		const fakePerson = fakeResource('PERSON', {
-			displayName: 'Fake Person'
+			displayName: 'Fake Person',
 		})
 		return {
 			person: fakePerson,

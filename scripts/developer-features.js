@@ -25,7 +25,7 @@ const tableKVs = (...all) => { // all feature toggles, each has key:String, val:
 
 const getUniquePerson = async (sparkTools, ...allStrings) => {
 	const isEmailAddress = anyString => anyString.includes('@')
-	const uniqueStrings = _.uniq(Array.from(allStrings, toString))
+	const uniqueStrings = Array.from(new Set(allStrings.map(toString)))
 	if (uniqueStrings.length === 0) return sparkTools.getPersonDetails()
 	const [emails, others] = _.partition(uniqueStrings, isEmailAddress)
 	for (const other of others) {
