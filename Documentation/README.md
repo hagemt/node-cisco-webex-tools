@@ -61,3 +61,28 @@ Here's where we should probably try to avoid a junkdrawer of sorts. Consider the
 * `listTeams`, `listTeamMemberships` and `listTeamsModeratedByMe` (useful for team onboarding, etc.)
 
 Add porcelian methods as needed, if one doesn't already exist. Try to compose where possible.
+
+#### Complex methods
+
+Some porcelian methods will be more complicated than others; query parameters generally add complexity.
+
+List methods should follow this rule of thumb: use ...args to capture (and filter) supported query options.
+
+For example, to list messages requires a space (first parameter) but should support using max/page options.
+
+N.B. The `validation` support module provides a `.buildURI(uri, query)` method and assorted JOI schema.
+
+### Debug, Logging, Prompts, etc.
+
+Using `console` in scripts should work as expected, but consider interaction with users very carefully.
+
+The `log` support module provides a `.debug(format, ...args)` method that conforms to the `debug` pattern.
+
+Most `scripts` benefit from at least one option, which sets `DEBUG` on the environment as appropriate.
+
+Please note that `package.json` provides some packages for your convenience; these include:
+
+* `chalk`: to color output, before you send it to `console.log`, or similar
+* `commander`: to provide more complex scripts with machinery to parse arguments
+* `inquirer`: for interactive scripts; see https://www.npmjs.com/package/inquirer
+* and more, e.g. `joi` (validation) `lodash` (toolbelt) `node-fetch` (requests)
