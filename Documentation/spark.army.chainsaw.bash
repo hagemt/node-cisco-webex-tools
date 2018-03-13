@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 
+[[ -x "$(command -v curl)" ]] && [[ -x "$(command -v jq)" ]] && [[ -x "$(command -v node)" ]] || \
+	echo 1>&2 "WARNING: required commands are not available (on macOS: brew install curl jq node)"
+
 function b64d {
-	for BASE64 in "$@"
-	do echo "$(echo $BASE64 | base64 -d 2> /dev/null)"
-	done
+	if [[ -z "$@" ]]
+	then
+		while read $TOKEN
+		do node -p "Buffer.from('$TOKEN', 'base64').toString()"
+		done < /dev/stdin
+	else
+		for TOKEN in "$@"
+		do node -p "Buffer.from('$TOKEN', 'base64').toString()"
+		done
+	fi
 }
 
 function json {
@@ -13,8 +23,9 @@ function json {
 		"$@" | jq '.'
 }
 
-export CISCOSPARK_DEVELOPER_TOKEN="PASTE_ME_FROM_THE_PORTAL"
-export CISCOSPARK_ORIGIN_URL='https://api.ciscospark.com'
+export CISCOSPARK_DEVELOPER_TOKEN="PASTE_ME_FROM_THE_PORTAL" # or after: npm install --global ciscospark-tools
+#export CISCOSPARK_DEVELOPER_TOKEN="$(cat ~/.ciscospark-tools/secrets.json | jq '.authorization.access_token' -r)"
+export CISCOSPARK_ORIGIN_URL='https://api.ciscospark.com' # try cst: https://www.npmjs.com/package/ciscospark-tools
 
 function spark {
 	local readonly TOKEN="$CISCOSPARK_ACCESS_TOKEN"
