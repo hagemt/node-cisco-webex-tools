@@ -1,5 +1,7 @@
 # ciscospark-tools
 
+[![Greenkeeper badge](https://badges.greenkeeper.io/hagemt/node-ciscospark-tools.svg)](https://greenkeeper.io/)
+
 You: resourceful business communication and collaboration enabler.
 
 You need scripts to help your people get stuff done. For example:
