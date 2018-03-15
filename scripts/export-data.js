@@ -42,6 +42,8 @@ const saveFileContent = async (filename, url, options) => {
 */
 
 const inquireDataExport = async (tools, CST_HOME) => {
+	const formatDirectoryPath = (dir = '') => dir === '' ? dir : `${dir.trim()}/` // not fs root
+	const tildePrefixReplacement = dir => dir.startsWith('~/') ? dir.replace('~', os.homedir()) : dir
 	const askWhichDirectory = Object.freeze({
 		default: defaultPath(), // relative to:
 		message: whichDirectoryMessage(CST_HOME),
@@ -62,10 +64,9 @@ const inquireDataExport = async (tools, CST_HOME) => {
 	const answers = await inquirer.prompt(questions)
 	const picked = new Set(answers[askWhichSpaces.name]) // if empty, filters all:
 	const pickedSpaces = allSpaces.filter(space => picked.has(spaceChoice(space)))
-	const directSpaces = allSpaces.filter(space => space.type === 'direct')
 	return {
-		directory: path.resolve(CST_HOME, answers[askWhichDirectory.name]),
-		spaces: pickedSpaces.length === 0 ? directSpaces : pickedSpaces,
+		directory: path.resolve(CST_HOME, tildePrefixReplacement(formatDirectoryPath(answers[askWhichDirectory.name]))),
+		spaces: pickedSpaces.length === 0 ? allSpaces.filter(space => space.type === 'direct') : pickedSpaces, // subset
 	}
 }
 
