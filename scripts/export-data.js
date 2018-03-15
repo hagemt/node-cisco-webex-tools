@@ -3,7 +3,7 @@ const os = require('os')
 const path = require('path')
 
 const chalk = require('chalk')
-const fetch = require('node-fetch')
+//const fetch = require('node-fetch')
 const inquirer = require('inquirer')
 const ProgressBar = require('progress')
 const _ = require('lodash')
