@@ -36,7 +36,7 @@ const decodeID = (encoded, encoding = 'base64') => {
 	return decoded.slice(decoded.lastIndexOf('/') + 1)
 }
 
-const authorizations = new WeakMap() // private mechanism to obtain the secret used, given an instance
+const authorizations = new WeakMap() // private mechanism to obtain the header, by instance
 const createdDate = ({ created }) => created ? new Date(created) : new Date() // default: now
 const MOST_RECENTLY_CREATED_FIRST = (lhs, rhs) => Math.sign(createdDate(rhs) - createdDate(lhs))
 
