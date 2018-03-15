@@ -1,0 +1,10 @@
+deploy:
+  github_token: $GITHUB_TOKEN
+  on:
+    branch: master
+  provider: pages
+  skip_cleanup: true
+language: node_js
+node_js:
+  - "lts/*"
+sudo: false
