@@ -55,7 +55,7 @@ const asyncParent = async (parent, env = parent.env) => {
 		if (!response.ok) throw new Error(`failed: GET ${packageURL}`)
 		const { 'dist-tags': { latest } } = await response.json()
 		if (latest === packageJSON.version) return // no update
-		return latest // eslint-disable-line consistent-return
+		return latest
 	}
 	parent.exitCode = 0 // explicitly optimistic outcome(s):
 	const tasks = {
@@ -78,7 +78,6 @@ const asyncParent = async (parent, env = parent.env) => {
 	})
 }
 
-// eslint-disable-next-line no-underscore-dangle
 ciscospark._name = chalk.bold(packageJSON.name || 'ciscospark-tools')
 ciscospark.version(packageJSON.version || 'unknown', '-v, --version')
 

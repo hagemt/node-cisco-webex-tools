@@ -1,0 +1,15 @@
+---
+branches:
+  only:
+    - master
+cache:
+  directories:
+    - "node_modules"
+install:
+  - npm install --ignore-scripts
+language: node_js
+node_js:
+  - "lts/*"
+notifications:
+  webhooks: []
+sudo: false

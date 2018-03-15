@@ -1,5 +1,8 @@
 # ciscospark-tools
 
+[![Travis CI badge](https://api.travis-ci.org/hagemt/node-ciscospark-tools.svg?branch=master)](https://travis-ci.org/hagemt/node-ciscospark-tools)
+[![Greenkeeper badge](https://badges.greenkeeper.io/hagemt/node-ciscospark-tools.svg)](https://account.greenkeeper.io/account/hagemt)
+
 You: resourceful business communication and collaboration enabler.
 
 You need scripts to help your people get stuff done. For example:

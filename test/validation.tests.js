@@ -4,6 +4,14 @@ const querystring = require('querystring')
 
 const validation = require('../support/validation.js')
 
+const catchError = (syncFunction, ...args) => {
+	try {
+		syncFunction(...args)
+	} catch (error) {
+		return error
+	}
+}
+
 describe('validation', () => {
 
 	const assertPositive = (baseURI, queryOptions, assertionString) => {
@@ -13,17 +21,16 @@ describe('validation', () => {
 	}
 
 	const assertNegative = (foreignObject, propertyName, messageExpected) => {
-		const t = f => { try { f() } catch (e) { return e } } // eslint-disable-line
-		const expectedError = t(() => assertPositive(foreignObject, propertyName))
-		assert(expectedError instanceof Error, `unexpected success (${messageExpected})`)
-		const assertionMessage = `unexpected failure message (${expectedError.message})`
-		return assert.equal(expectedError.message, messageExpected, assertionMessage)
+		const actualError = catchError(() => assertPositive(foreignObject, propertyName))
+		assert(actualError instanceof Error, `unexpected success (expected: ${messageExpected})`)
+		const assertionMessage = `unexpected failure (error message: ${actualError.message})`
+		return assert.equal(actualError.message, messageExpected, assertionMessage)
 	}
 
 	it('can validate list teams queries', () => {
 		assertNegative('/v1/teams', { max: 0 }, '"max" must be larger than or equal to 1')
 		assertNegative('/v1/teams', { max: 1001 }, '"max" must be less than or equal to 1000')
-		assertPositive('/v1/teams', { max: undefined }) // eslint-disable-line no-undefined
+		assertPositive('/v1/teams', { max: undefined })
 		assertPositive('/v1/teams', { max: 1 })
 		assertPositive('/v1/teams', { max: 10 })
 		assertPositive('/v1/teams', { max: 100 })
