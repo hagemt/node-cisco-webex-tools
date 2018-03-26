@@ -1,8 +1,9 @@
-const debug = require('debug')
+const createDebugLog = require('debug')
 
 const packageJSON = require('../package.json')
-const debugLogger = debug(packageJSON.name)
+const defaultDebugLog = createDebugLog(packageJSON.name)
 
 module.exports = {
-	debug: (...args) => debugLogger(...args),
+	create: (...args) => createDebugLog(...args),
+	debug: (...args) => defaultDebugLog(...args),
 }
