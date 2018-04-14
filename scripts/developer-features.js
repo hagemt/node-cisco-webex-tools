@@ -1,4 +1,5 @@
 /* eslint-env node */
+const inquirer = require('inquirer')
 const _ = require('lodash')
 
 const log = require('../support/log.js')
@@ -23,10 +24,11 @@ const tableKVs = (...all) => { // all feature toggles, each has key:String, val:
 	return rows.join('\n')
 }
 
-const getUniquePerson = async (sparkTools, ...allStrings) => {
+// returns the first person uniquely identified by a list of specifiers
+// valid specifier: firstly, an id/UUID or email address (may be unique)
+const findUniquePerson = async (sparkTools, ...allStrings) => {
 	const isEmailAddress = anyString => anyString.includes('@')
 	const uniqueStrings = Array.from(new Set(allStrings.map(toString)))
-	if (uniqueStrings.length === 0) return sparkTools.getPersonDetails()
 	const [emails, others] = _.partition(uniqueStrings, isEmailAddress)
 	for (const other of others) {
 		const person = await sparkTools.getPersonDetails(other).catch(() => null)
@@ -39,30 +41,69 @@ const getUniquePerson = async (sparkTools, ...allStrings) => {
 	throw new Error(`no such person: ${uniqueStrings.join()}`)
 }
 
-const askFeatureService = async (token, user, key, value) => {
-	const spark = SparkTools.fromAccessToken(token) // or from env
-	await spark.pingFeatureService() // to sanity check the token
-	const id = _.get(await getUniquePerson(spark, user), 'id')
-	if (!key) return spark.listDeveloperFeatures([], id)
-	if (!value) return spark.listDeveloperFeatures([key], id)
-	return [await spark.setDeveloperFeature(key, value, true, id)]
+// returns an Array of developer feature toggle Objects
+// feature toggle will be set if key AND value are defined
+const listDeveloperFeatures = async (spark, key, value) => {
+	await spark.pingFeatureService()
+	const me = await spark.getPersonDetails('me')
+	if (!key) return spark.listDeveloperFeatures([], me)
+	if (!value) return spark.listDeveloperFeatures([key], me)
+	return [await spark.setDeveloperFeature(key, value, true, me)]
 }
 
-module.exports = {
-	askFeatureService,
+const buildClientMap = async (spark, all) => {
+	const me = await spark.getPersonDetails('me')
+	const people = _.uniqBy(await Promise.all(Array.from(all, one => findUniquePerson(spark, one))), 'id')
+	const questions = Array.from(people)
+		.filter(({ id }) => id !== me.id)
+		.map(person => Object.freeze({
+			message: `What is the access token for the "${person.displayName}" user?`,
+			name: `askAccessToken:${person.id}`,
+			person,
+		}))
+	const answers = await inquirer.prompt(questions).catch(() => null)
+	if (!answers) throw new Error('Sorry, but I need access tokens to do that.')
+	return new Map(people.map((person) => {
+		const token = answers[`askAccessToken:${person.id}`]
+		return [person, token ? SparkTools.fromAccessToken(token) : spark]
+	}))
+}
+
+const buildResultMap = async (token, users, key, value) => {
+	const results = new Map()
+	const who = await buildClientMap(SparkTools.fromAccessToken(token), users.split(','))
+	for (const [person, client] of who) {
+		/*
+		// for v1.0, could prompt with a menu of available toggles, then set interactively?
+		const query = `${key || ''}=${value || ''}` // need to support -b, --bulk $YAML?
+		log.debug('for %s (%s) will toggle: %s', person.id, person.displayName, query)
+		const what = new Map(Object.entries(require('querystring').parse(query)))
+		const array = []
+		for (const [key, value] of what) {
+			const all = await listDeveloperFeatures(client, key, value)
+			for (const one of all) array.push(one)
+		}
+		results.push([person, array])
+		*/
+		results.set(person, await listDeveloperFeatures(client, key, value))
+	}
+	return results
 }
 
 if (!module.parent) {
 	/* eslint-disable no-console */
-	const args = process.argv.slice(2).map(toString) // [user,key,value] String(s)
-	if (args.length < 2) log.debug('for %s, will list all toggles', args[0] || 'you')
+	const args = process.argv.slice(2).map(toString) // [users,key,value] String(s)
+	if (args.length < 2) log.debug('for %s, will list all toggles', args[0] || 'me')
 	if (args.length === 2) log.debug('for %s, will get toggle named %s', args[0], args[1])
 	if (args.length > 2) log.debug('for %s, will set toggle %s=%s', args[0], args[1], args[2])
-	askFeatureService(process.env.CISCOSPARK_ACCESS_TOKEN, ...args)
-		.then((toggles) => {
-			toggles.sort(({ key: k1 }, { key: k2 }) => compareStrings(k1, k2))
-			if (process.stdout.isTTY) console.log(tableKVs(...toggles))
-			else console.log(JSON.stringify(toggles, null, '\t'))
+	buildResultMap(process.env.CISCOSPARK_ACCESS_TOKEN, ...args)
+		.then((result) => {
+			for (const toggles of result.values()) {
+				//console.error(`=== developer features for ${key.displayName} ===`)
+				toggles.sort(({ key: k1 }, { key: k2 }) => compareStrings(k1, k2))
+				if (process.stdout.isTTY) console.log(tableKVs(...toggles))
+				else console.log(JSON.stringify(toggles, null, '\t'))
+			}
 		})
 		.catch((reason) => {
 			console.error(reason)
