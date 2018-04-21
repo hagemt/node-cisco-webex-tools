@@ -3,9 +3,9 @@ const { URL } = require('url')
 const _ = require('lodash')
 const fetch = require('node-fetch')
 
+const ClientError = require('./ClientError.js')
 const log = require('./log.js') // DEBUG support
 const PACKAGE_JSON = require('../package.json')
-const SparkError = require('./SparkError.js')
 const validation = require('./validation.js')
 
 const USER_AGENT_PREFIX = `${PACKAGE_JSON.name}/${PACKAGE_JSON.version} (+${PACKAGE_JSON.bugs.url})`
@@ -15,6 +15,7 @@ const DEFAULT_HEADERS = Object.freeze({
 	'user-agent': `${USER_AGENT_PREFIX} ${USER_AGENT_SUFFIX}`,
 })
 
+// TODO (tohagema): these contain "ciscospark" which will need to change...
 const { CISCOSPARK_ACCESS_TOKEN, CISCOSPARK_URL_ORIGIN } = Object(process.env)
 const DEFAULT_ORIGIN = String(CISCOSPARK_URL_ORIGIN || 'https://api.ciscospark.com')
 const FEATURE_ORIGIN = process.env.FEATURE_ORIGIN || 'https://feature.a6.ciscospark.com'
@@ -41,7 +42,7 @@ const createdDate = ({ created }) => created ? new Date(created) : new Date() //
 const MOST_RECENTLY_CREATED_FIRST = (lhs, rhs) => Math.sign(createdDate(rhs) - createdDate(lhs))
 
 /**
- * Make requests and parse responses from public Spark APIs. Add methods to support scripts.
+ * Make requests and parse responses from Cisco Webex for Developers. Add methods to support scripts.
  *
  * Try to follow conventions of existing methods, and delegate/re-use when it makes sense to do so.
  *
@@ -49,7 +50,7 @@ const MOST_RECENTLY_CREATED_FIRST = (lhs, rhs) => Math.sign(createdDate(rhs) - c
  *
  * As a general rule, try to remain orderly: don't add unnecessary plumbing, and keep porcelian consistent.
  */
-class SparkTools {
+class ClientTools {
 
 	// constructor signature is volatile; use static factory methods
 	constructor (userAccessToken = CISCOSPARK_ACCESS_TOKEN) {
@@ -75,18 +76,19 @@ class SparkTools {
 			case 204: // No Content
 				return
 			case 401: // Unauthorized
-				throw new SparkError('access token is invalid (get a new one from dev.ciscospark.com)')
+				throw new ClientError(`access token is invalid (authorize/set a new token via ${PACKAGE_JSON.name} tutorial)`)
 			case 429: // Too Many Requests
 			case 503: // Service Unavailable
 				if (!this.retry || !request.retry || !response.headers.has('retry-after')) {
-					throw new SparkError('sent Too Many Requests (according to Spark) and will not retry')
+					throw new ClientError('sent Too Many Requests (according to Spark) and will not retry')
 				}
-				return SparkError.retryAfter(response.headers.get('retry-after'), async () => this.json(uri, options))
+				return ClientError.retryAfter(response.headers.get('retry-after'), async () => this.json(uri, options))
 			default:
-				throw await SparkError.fromResponse(response).catch(nonSparkError => nonSparkError)
+				throw await ClientError.fromResponse(response).catch(nonSparkError => nonSparkError)
 			}
 		}
 		this.log = (format, ...args) => log.debug(format, ...args)
+		this.log.debug = this.log // prefer this alias, in future
 		this.page = async (response, request, array = []) => {
 			const { items } = await response.json()
 			for (const item of items) array.push(item)
@@ -107,24 +109,41 @@ class SparkTools {
 		const response = await fetch(url, options).catch(error => error)
 		const [s, ns] = process.hrtime(hrtime)
 		// e.g. GET /v1/people/me => 200 OK (in 0.200s)
-		this.log(
+		this.log.debug(
 			'fetch: %s %s => %s %s (in %ss)',
 			String(_.get(options, 'method', 'GET')),
 			url, // N.B. fetch ignores options.url
 			String(Number(response.status) || 0),
-			SparkError.statusMessage(response),
+			ClientError.statusMessage(response),
 			Number(s + ns / 1e9).toFixed(3),
 		)
 		if (response instanceof Error) throw response
 		return response // may or may not be 200 OK
 	}
 
-	async addMembershipToTeam ({ personEmail }, team, ...args) {
-		const { isModerator } = Object.assign({}, ...args)
+	async addMembershipToSpace (space, ...args) {
+		const { isModerator, personEmail } = Object.assign({}, space, ...args)
+		if (!personEmail) throw new Error('missing person email')
+		const roomId = _.get(space, 'id', space)
+		if (!roomId) throw new Error('missing space id')
+		this.log.debug(
+			'add (moderator: %s) participant (email: %s) to space (id: %s)',
+			isModerator ? 'true' : 'false',
+			personEmail,
+			roomId,
+		)
+		return this.json('/v1/memberships', {
+			body: { isModerator, personEmail, roomId },
+			method: 'POST',
+		})
+	}
+
+	async addMembershipToTeam (team, ...args) {
+		const { isModerator, personEmail } = Object.assign({}, team, ...args)
+		if (!personEmail) throw new Error('missing person email')
 		const teamId = _.get(team, 'id', team)
 		if (!teamId) throw new Error('missing team id')
-		if (!personEmail) throw new Error('missing person email')
-		this.log(
+		this.log.debug(
 			'add (moderator: %s) participant (email: %s) to team (id: %s)',
 			isModerator ? 'true' : 'false',
 			personEmail,
@@ -136,9 +155,10 @@ class SparkTools {
 		})
 	}
 
-	async createTeamAsModerator ({ name }) {
+	async createTeamAsModerator (...args) {
+		const { name } = Object.assign({}, ...args)
 		if (!name) throw new Error('missing team name')
-		this.log('create team (name: %s)', name)
+		this.log.debug('create team (name: %s)', name)
 		return this.json('/v1/teams', {
 			body: { name },
 			method: 'POST',
@@ -157,7 +177,7 @@ class SparkTools {
 		return this.json(`/v1/teams/${id}`)
 	}
 
-	async getTeamMembership (person, team) {
+	async getTeamMembership (team, person) {
 		const personUUID = decodeID(_.get(person, 'id', person))
 		const teamUUID = decodeID(_.get(team, 'id', team))
 		if (!personUUID) throw new Error('missing person id')
@@ -175,7 +195,13 @@ class SparkTools {
 	}
 
 	async listMemberships (...args) {
-		return this.listSpaceMemberships(...args)
+		// by default: will list own SPACE memberships
+		// TODO (tohagema): allow type=direct,group,team?
+		const input = Object.assign({ max: 1000 }, ...args)
+		const uri = validation.buildURI('/v1/memberships', input)
+		const options = _.pick(input, ['page', 'retry'])
+		const { items } = await this.json(uri, options)
+		return items
 	}
 
 	async listMessages (space, ...args) {
@@ -198,7 +224,7 @@ class SparkTools {
 	async listSpaceMemberships (space, ...args) {
 		const roomId = _.get(space, 'space.id', _.get(space, 'id', space))
 		const input = Object.assign({ max: 1000, roomId }, ...args)
-		const uri = validation.buildURI('/v1/memberships', input)
+		const uri = validation.buildURI('/v1/space/memberships', input)
 		const options = _.pick(input, ['page', 'retry'])
 		const { items } = await this.json(uri, options)
 		return items
@@ -206,7 +232,7 @@ class SparkTools {
 
 	async listSpaces (...args) {
 		const input = Object.assign({ max: 1000 }, ...args)
-		const uri = validation.buildURI('/v1/rooms', input)
+		const uri = validation.buildURI('/v1/spaces', input)
 		const options = _.pick(input, ['page', 'retry'])
 		const { items } = await this.json(uri, options)
 		return items
@@ -241,7 +267,7 @@ class SparkTools {
 		const teams = await this.listTeams(...args)
 		const me = await this.getPersonDetails('me')
 		const isModerator = await Promise.all(teams.map(async (team) => {
-			const myTeamMembership = await this.getTeamMembership(me, team)
+			const myTeamMembership = await this.getTeamMembership(team, me)
 			return myTeamMembership.isModerator // if false, team filtered out
 		}))
 		return teams.filter((team, index) => isModerator[index]).sort(MOST_RECENTLY_CREATED_FIRST)
@@ -294,7 +320,7 @@ class SparkTools {
 	}
 
 	async postMessageToEmail (email, message) {
-		this.log('posting message to: %s', email)
+		this.log.debug('posting message to: %s', email)
 		return this.json('/v1/messages', {
 			body: {
 				markdown: message,
@@ -305,9 +331,9 @@ class SparkTools {
 	}
 
 	static fromAccessToken (token) {
-		return new SparkTools(token)
+		return new ClientTools(token)
 	}
 
 }
 
-module.exports = SparkTools
+module.exports = ClientTools
