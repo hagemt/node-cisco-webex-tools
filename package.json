@@ -1,6 +1,6 @@
 {
   "name": "cisco-webex-tools",
-  "version": "0.8.0",
+  "version": "0.7.6",
   "author": "Tor E Hagemann <tor.hagemann@gmail.com>",
   "description": "Execute tasks large and small using APIs for Cisco Webex Teams, and more!",
   "homepage": "https://github.com/hagemt/node-cisco-webex-tools#readme",
