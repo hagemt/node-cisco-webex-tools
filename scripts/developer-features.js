@@ -44,15 +44,21 @@ const findUniquePerson = async (clientTools, ...allStrings) => {
 // returns an Array of developer feature toggle Objects
 // feature toggle will be set if key AND value are defined
 const findDeveloperFeatures = async (tools, key, value) => {
-	await tools.pingFeatureService()
-	if (!key) return tools.listDeveloperFeatures([])
-	try {
-		if (!value) return tools.listDeveloperFeatures([key])
-		return [await tools.setDeveloperFeature(key, value)]
-	} catch (error) {
-		if (error.response.code !== 404) throw error
-		return [{ key, val: 'NOT SET' }] // fake
+	await tools.pingFeatureService() // ensures correct URL
+	if (!key) {
+		const all = await tools.listDeveloperFeatures([])
+		return all
 	}
+	if (!value) {
+		try {
+			const [one] = await tools.listDeveloperFeatures([key])
+			return [one]
+		} catch (error) {
+			if (!error.message.includes('Not Found')) throw error
+			return [{ key, val: 'Not Found (should set value)' }]
+		}
+	}
+	return [await tools.setDeveloperFeature(key, value)]
 }
 
 // inquire (once) for any token not for 'me'
