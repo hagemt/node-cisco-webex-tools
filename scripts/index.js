@@ -119,6 +119,14 @@ commander.command('developer-features [key] [value]').alias('df')
 		await asyncChild(process, resolveScript('developer-features.js'), ...args)
 	})
 
+commander.command('developer-webhooks [args...]').alias('dw')
+	.description(chalk.yellow('check (santity test) existing webhooks (also provides easy create/delete and list mechanisms)'))
+	.option('-d, --debug', `with DEBUG=${ourDEBUG} (verbose mode)`)
+	.action(async (args, options) => {
+		if (options.debug) process.env.DEBUG = ourDEBUG
+		await asyncChild(process, resolveScript('developer-webhooks.js'), ...args)
+	})
+
 commander.command('export-data').alias('ed')
 	.description(chalk.yellow('exfiltrate all messages from your spaces to disk in a structured data format (JSON)'))
 	.option('-d, --debug', `with DEBUG=${ourDEBUG} (verbose mode)`)

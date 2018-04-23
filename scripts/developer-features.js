@@ -4,7 +4,7 @@ const _ = require('lodash')
 
 const log = require('../support/log.js')
 
-const SparkTools = require('../support/SparkTools.js')
+const ClientTools = require('../support/ClientTools.js')
 
 const toString = (any = '') => String(!any || any === 'undefined' ? '' : any)
 const compareStrings = (one, two) => toString(one).localeCompare(toString(two))
@@ -26,16 +26,16 @@ const tableKVs = (...all) => { // all feature toggles, each has key:String, val:
 
 // returns the first person uniquely identified by a list of specifiers
 // valid specifier: firstly, an id/UUID or email address (may be unique)
-const findUniquePerson = async (sparkTools, ...allStrings) => {
+const findUniquePerson = async (clientTools, ...allStrings) => {
 	const isEmailAddress = anyString => anyString.includes('@')
 	const uniqueStrings = Array.from(new Set(allStrings.map(toString)))
 	const [emails, others] = _.partition(uniqueStrings, isEmailAddress)
 	for (const other of others) {
-		const person = await sparkTools.getPersonDetails(other).catch(() => null)
+		const person = await clientTools.getPersonDetails(other).catch(() => null)
 		if (person) return person // assumes other is id:String, ignores error(s)
 	}
 	for (const email of emails) {
-		const people = await sparkTools.listPeople({ email }).catch(() => [])
+		const people = await clientTools.listPeople({ email }).catch(() => [])
 		if (people.length === 1) return people[0] // don't allow multiples
 	}
 	throw new Error(`no such person: ${uniqueStrings.join()}`)
@@ -43,17 +43,22 @@ const findUniquePerson = async (sparkTools, ...allStrings) => {
 
 // returns an Array of developer feature toggle Objects
 // feature toggle will be set if key AND value are defined
-const listDeveloperFeatures = async (spark, key, value) => {
-	await spark.pingFeatureService()
-	const me = await spark.getPersonDetails('me')
-	if (!key) return spark.listDeveloperFeatures([], me)
-	if (!value) return spark.listDeveloperFeatures([key], me)
-	return [await spark.setDeveloperFeature(key, value, true, me)]
+const findDeveloperFeatures = async (tools, key, value) => {
+	await tools.pingFeatureService()
+	if (!key) return tools.listDeveloperFeatures([])
+	try {
+		if (!value) return tools.listDeveloperFeatures([key])
+		return [await tools.setDeveloperFeature(key, value)]
+	} catch (error) {
+		if (error.response.code !== 404) throw error
+		return [{ key, val: 'NOT SET' }] // fake
+	}
 }
 
-const buildClientMap = async (spark, all) => {
-	const me = await spark.getPersonDetails('me')
-	const people = _.uniqBy(await Promise.all(Array.from(all, one => findUniquePerson(spark, one))), 'id')
+// inquire (once) for any token not for 'me'
+const buildClientMap = async (tools, all) => {
+	const me = await tools.getPersonDetails('me')
+	const people = _.uniqBy(await Promise.all(Array.from(all, one => findUniquePerson(tools, one))), 'id')
 	const questions = Array.from(people)
 		.filter(({ id }) => id !== me.id)
 		.map(person => Object.freeze({
@@ -61,17 +66,19 @@ const buildClientMap = async (spark, all) => {
 			name: `askAccessToken:${person.id}`,
 			person,
 		}))
-	const answers = await inquirer.prompt(questions).catch(() => null)
-	if (!answers) throw new Error('Sorry, but I need access tokens to do that.')
+	const answers = await inquirer.prompt(questions)
 	return new Map(people.map((person) => {
 		const token = answers[`askAccessToken:${person.id}`]
-		return [person, token ? SparkTools.fromAccessToken(token) : spark]
+		return [person, token ? ClientTools.fromAccessToken(token) : tools]
 	}))
 }
 
+// all this logic really needs refactoring; ideas for v1.0:
+// accept a JSON (or similar) file listing features and users
+// put this behind a flag we could call -b, --bulk $filepath
 const buildResultMap = async (token, users, key, value) => {
 	const results = new Map()
-	const who = await buildClientMap(SparkTools.fromAccessToken(token), users.split(','))
+	const who = await buildClientMap(ClientTools.fromAccessToken(token), users.split(','))
 	for (const [person, client] of who) {
 		/*
 		// for v1.0, could prompt with a menu of available toggles, then set interactively?
@@ -80,12 +87,12 @@ const buildResultMap = async (token, users, key, value) => {
 		const what = new Map(Object.entries(require('querystring').parse(query)))
 		const array = []
 		for (const [key, value] of what) {
-			const all = await listDeveloperFeatures(client, key, value)
+			const all = await findDeveloperFeatures(client, key, value)
 			for (const one of all) array.push(one)
 		}
 		results.push([person, array])
 		*/
-		results.set(person, await listDeveloperFeatures(client, key, value))
+		results.set(person, await findDeveloperFeatures(client, key, value))
 	}
 	return results
 }
@@ -98,11 +105,11 @@ if (!module.parent) {
 	if (args.length > 2) log.debug('for %s, will set toggle %s=%s', args[0], args[1], args[2])
 	buildResultMap(process.env.CISCOSPARK_ACCESS_TOKEN, ...args)
 		.then((result) => {
-			for (const toggles of result.values()) {
-				//console.error(`=== developer features for ${key.displayName} ===`)
-				toggles.sort(({ key: k1 }, { key: k2 }) => compareStrings(k1, k2))
-				if (process.stdout.isTTY) console.log(tableKVs(...toggles))
-				else console.log(JSON.stringify(toggles, null, '\t'))
+			for (const [key, value] of result) {
+				console.error(`=== developer features for ${key.displayName} ===`)
+				value.sort(({ key: k1 }, { key: k2 }) => compareStrings(k1, k2))
+				if (process.stdout.isTTY) console.log(tableKVs(...value))
+				else console.log(JSON.stringify(value, null, '\t'))
 			}
 		})
 		.catch((reason) => {

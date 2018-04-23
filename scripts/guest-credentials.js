@@ -9,17 +9,18 @@ const toString = any => String(!any || any === 'undefined' ? '' : any)
 const testGuestCredentials = async (issuer, secret, email) => {
 	console.log('Composing the token and signing it:')
 
-	const jwtPayload = {
-		'sub': 'cisco-webex-tools',
+	// https://jwt.io/
+	const jwtClaims = {
+		'iss': issuer,
 		'name': 'Cisco Webex Tools',
-		'iss': issuer
+		'sub': 'cisco-webex-tools',
 	}
-	var jwtToken = jwt.sign(jwtPayload, Buffer.from(secret, 'base64'), { expiresIn: '5m' })
+	const jwtToken = jwt.sign(jwtClaims, Buffer.from(secret, 'base64'), { expiresIn: '5m' })
 	console.log(jwtToken)
 
-	const loginClient = ClientTools.fromAccessToken()
-	console.log('Logging in using by posting signed JWT to: https://api.ciscospark.com/jwt/login')
-	const ciToken = await loginClient.jwtLogin(jwtToken)
+	const defaultClient = ClientTools.fromAccessToken()
+	console.log('Sending signed JWT to: POST /v1/jwt/login')
+	const ciToken = await defaultClient.jwtLogin(jwtToken)
 		.then((res) => {
 			console.log('Succesfully logged in. OAuth token expires in', res.expiresIn)
 			return res.token
@@ -29,11 +30,12 @@ const testGuestCredentials = async (issuer, secret, email) => {
 		})
 
 	if (!email) {
-		email = (await loginClient.getPersonDetails('me')).emails[0]
+		const { emails } = await defaultClient.getPersonDetails('me')
+		email = emails[0]
 	}
 	console.log('Now sending a message to:', email)
-	const sparkClient = ClientTools.fromAccessToken(ciToken)
-	await sparkClient.postMessageToEmail(email, 'This is a **test**! Your JWT credentials are working as intended!')
+	const markdown = 'This is a **test**! Your JWT credentials are working as intended!'
+	await ClientTools.fromAccessToken(ciToken).postMessageToEmail(email, markdown)
 }
 
 module.exports = {
