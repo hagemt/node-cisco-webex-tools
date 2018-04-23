@@ -1,9 +1,8 @@
+/* eslint-disable no-console */
 /* eslint-env node */
 const jwt = require('jsonwebtoken')
 
-const SparkTools = require('../support/SparkTools.js')
-
-/* eslint-disable no-console */
+const ClientTools = require('../support/ClientTools.js')
 
 const toString = any => String(!any || any === 'undefined' ? '' : any)
 
@@ -11,14 +10,14 @@ const testGuestCredentials = async (issuer, secret, email) => {
 	console.log('Composing the token and signing it:')
 
 	const jwtPayload = {
-		'sub': 'cisco-spark-tools',
-		'name': 'Cisco Spark Tools',
+		'sub': 'cisco-webex-tools',
+		'name': 'Cisco Webex Tools',
 		'iss': issuer
 	}
 	var jwtToken = jwt.sign(jwtPayload, Buffer.from(secret, 'base64'), { expiresIn: '5m' })
 	console.log(jwtToken)
 
-	const loginClient = SparkTools.fromAccessToken()
+	const loginClient = ClientTools.fromAccessToken()
 	console.log('Logging in using by posting signed JWT to: https://api.ciscospark.com/jwt/login')
 	const ciToken = await loginClient.jwtLogin(jwtToken)
 		.then((res) => {
@@ -33,7 +32,7 @@ const testGuestCredentials = async (issuer, secret, email) => {
 		email = (await loginClient.getPersonDetails('me')).emails[0]
 	}
 	console.log('Now sending a message to:', email)
-	const sparkClient = SparkTools.fromAccessToken(ciToken)
+	const sparkClient = ClientTools.fromAccessToken(ciToken)
 	await sparkClient.postMessageToEmail(email, 'This is a **test**! Your JWT credentials are working as intended!')
 }
 

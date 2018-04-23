@@ -1,25 +1,23 @@
 #!/usr/bin/env node
-
 const ChildProcess = require('child_process')
-
-//const DNS = require('dns')
-const FS = require('fs')
-const OS = require('os')
-const Path = require('path')
+//const dns = require('dns')
+const fs = require('fs')
+const os = require('os')
+const path = require('path')
 
 const chalk = require('chalk')
 const commander = require('commander')
 const fetch = require('node-fetch')
 const semver = require('semver')
 
-const packageJSON = require('../package.json')
-//const Client = require('../support/CiscoTools.js')
+const PACKAGE_JSON = require('../package.json')
+//const ClientTools = require('../support/ClientTools.js')
 
 // if there are other known paths to look for scripts, do that here:
-const resolveScript = (...args) => Path.resolve(__dirname, ...args)
+const resolveScript = (...args) => path.resolve(__dirname, ...args)
 
 const oldDEBUG = process.env.DEBUG || '' // usage: https://www.npmjs.com/package/debug
-const ourDEBUG = oldDEBUG ? `${oldDEBUG},${packageJSON.name}*` : `${packageJSON.name}*`
+const ourDEBUG = oldDEBUG ? `${oldDEBUG},${PACKAGE_JSON.name}*` : `${PACKAGE_JSON.name}*`
 const unhandledRejections = new Map() // Promise => Error (for parent Process only)
 
 // returns a ChildProcess instance (currently via .fork)
@@ -47,12 +45,12 @@ const asyncChild = async (parent, modulePath, ...args) => {
 // run an elaborate (but reasonable) sequence setup tasks
 // (reasonable means fast and makes sense on every command)
 const asyncParent = async (parent, env = parent.env) => {
-	const DEFAULT_DIRECTORY_PATH = Path.resolve(OS.homedir(), `.${packageJSON.name}`)
-	const SECRETS_JSON_PATH = Path.resolve(DEFAULT_DIRECTORY_PATH, 'secrets.json')
-	// N.B. tutorial saves Authorization in ~/.${packageJSON.name}/secrets.json
+	const DEFAULT_DIRECTORY_PATH = path.resolve(os.homedir(), `.${PACKAGE_JSON.name}`)
+	const SECRETS_JSON_PATH = path.resolve(DEFAULT_DIRECTORY_PATH, 'secrets.json')
+	// N.B. tutorial saves Authorization in ~/.${PACKAGE_JSON.name}/secrets.json
 	const setupSecrets = async (secretsPath = SECRETS_JSON_PATH) => {
 		if (!env.CISCOSPARK_ACCESS_TOKEN) {
-			const secrets = JSON.parse(FS.readFileSync(secretsPath))
+			const secrets = JSON.parse(fs.readFileSync(secretsPath))
 			const token = secrets.authorization.access_token
 			if (token) env.CISCOSPARK_ACCESS_TOKEN = token
 			else throw new Error('missing access token')
@@ -66,7 +64,7 @@ const asyncParent = async (parent, env = parent.env) => {
 	}
 	const newerVersion = async () => { // non-invasive (max 1s) update check
 		if (Math.random() < 0.9) return // no-op usually, only check w/ p=10%
-		const registryURL = `https://registry.npmjs.org/${packageJSON.name}`
+		const registryURL = `https://registry.npmjs.org/${PACKAGE_JSON.name}`
 		const response = await fetch(registryURL, { timeout: 1000 })
 		if (!response.ok) throw new Error(`failed: GET ${registryURL}`)
 		const { 'dist-tags': { latest } } = await response.json()
@@ -108,8 +106,8 @@ const asyncParent = async (parent, env = parent.env) => {
 	return tasks
 }
 
-commander._name = chalk.bold(packageJSON.name || 'cisco-webex-tools')
-commander.version(packageJSON.version || 'unknown', '-v, --version')
+commander._name = chalk.bold(PACKAGE_JSON.name || 'cisco-webex-tools')
+commander.version(PACKAGE_JSON.version || 'unknown', '-v, --version')
 
 commander.command('developer-features [key] [value]').alias('df')
 	.description(chalk.blue('list/get/set which special functionality your user has toggled (enabled/disabled)'))
@@ -167,23 +165,15 @@ commander.command('roster-memberships').alias('rm')
 		await asyncChild(process, resolveScript('roster-memberships.js'))
 	})
 
-commander.command('webhook-tools [args...]').alias('wt')
-	.description(chalk.yellow('check (santity test) existing webhooks (also provides easy create/delete and list mechanisms)'))
-	.option('-d, --debug', `with DEBUG=${ourDEBUG} (verbose mode)`)
-	.action(async (args, options) => {
-		if (options.debug) process.env.DEBUG = ourDEBUG
-		await asyncChild(process, resolveScript('webhook-tools.js'), ...args)
-	})
-
 commander.command('tutorial [args...]').alias('tour')
-	.description(chalk.green(`if you're new to ${packageJSON.name} (or want to learn more) get started here! (alias: tour)`))
+	.description(chalk.green(`if you're new to ${PACKAGE_JSON.name} (or want to learn more) get started here! (alias: tour)`))
 	.option('-d, --debug', `with DEBUG=${ourDEBUG} (verbose mode)`)
 	.option('-f, --force', 'ignore any secret(s) known beforehand')
 	.action(async (args, options) => {
 		if (options.debug) process.env.DEBUG = ourDEBUG
 		if (options.force) process.env.CISCOSPARK_ACCESS_TOKEN = ''
 		// args might specify specific tutorials, or set(s) of tutorials
-		await asyncChild(process, resolveScript('tutorial.js'), args)
+		await asyncChild(process, resolveScript('meta-tutorial.js'), args)
 	})
 
 if (process.env.NODE_ENV === 'test') {
@@ -195,7 +185,7 @@ if (process.env.NODE_ENV === 'test') {
 		})
 	commander.command('test-script-failure')
 		.action(async () => {
-			await asyncChild(process, resolveScript('test-failure.js'))
+			await asyncChild(process, resolveScript('meta-failure.js'))
 		})
 	commander.command('test-script-missing')
 		.action(async () => {
@@ -203,7 +193,7 @@ if (process.env.NODE_ENV === 'test') {
 		})
 	commander.command('test-script-success')
 		.action(async () => {
-			await asyncChild(process, resolveScript('test-success.js'))
+			await asyncChild(process, resolveScript('meta-success.js'))
 		})
 	commander.command('test-reject-async')
 		.action(async () => {
@@ -246,8 +236,8 @@ if (!module.parent) {
 			if (parseCommands.args.every(one => typeof one === 'string')) {
 				if (newerVersion instanceof Error) {
 					console.error(chalk.red(`\n\tFailed to check for new version (${newerVersion.message})`))
-				} else if (newerVersion && semver.lt(packageJSON.version, newerVersion)) {
-					console.error(`\n\tN.B. an update for ${packageJSON.name} is available (${newerVersion})`)
+				} else if (newerVersion && semver.lt(PACKAGE_JSON.version, newerVersion)) {
+					console.error(`\n\tN.B. an update for ${PACKAGE_JSON.name} is available (${newerVersion})`)
 				}
 				if (setupSecrets instanceof Error) {
 					console.error(chalk.red(`\n\tFailed to load/check access token (${setupSecrets.message})`))
@@ -259,11 +249,11 @@ if (!module.parent) {
 			console.error()
 			console.error(Object.assign(error, { message: chalk.red(error.message || 'no error message provided') }))
 			console.error()
-			console.error(chalk.yellow(`\tError message(s) above may be due to bugs in the npm package: ${packageJSON.name}`))
+			console.error(chalk.yellow(`\tError message(s) above may be due to bugs in the npm package: ${PACKAGE_JSON.name}`))
 			console.error()
 			console.error(chalk.yellow('\tIf so, please file a GitHub issue (with full reproduction steps) here:'))
 			console.error()
-			console.error(chalk.yellow(`\t${packageJSON.bugs.url}`))
+			console.error(chalk.yellow(`\t${PACKAGE_JSON.bugs.url}`))
 			console.error()
 			process.exitCode = 1
 		})

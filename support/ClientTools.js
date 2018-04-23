@@ -80,11 +80,11 @@ class ClientTools {
 			case 429: // Too Many Requests
 			case 503: // Service Unavailable
 				if (!this.retry || !request.retry || !response.headers.has('retry-after')) {
-					throw new ClientError('sent Too Many Requests (according to Spark) and will not retry')
+					throw new ClientError(`sent too many requests (response status: ${response.status}) and cannot retry`)
 				}
 				return ClientError.retryAfter(response.headers.get('retry-after'), async () => this.json(uri, options))
 			default:
-				throw await ClientError.fromResponse(response).catch(nonSparkError => nonSparkError)
+				throw await ClientError.fromResponse(response).catch(nonClientError => nonClientError)
 			}
 		}
 		this.log = (format, ...args) => log.debug(format, ...args)

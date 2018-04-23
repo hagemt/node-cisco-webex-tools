@@ -12,7 +12,7 @@ class ClientError extends Error {
 		const details = _.get(body, 'message', statusMessage)
 		const tracking = _.get(body, 'trackingId', 'missing')
 		const message = `(tracking ID: ${tracking}) ${details}`
-		log.debug('Error from Spark %s', message) // too much logging?
+		log.debug('ClientError#fromResponse: %s', message) // too much?
 		return Object.assign(new ClientError(message), { body, response })
 	}
 
