@@ -48,7 +48,7 @@ If you're on macOS and not using something like `brew`, you may need to use `sud
 
 Another great tool, especially if you have need to manage multiple versions of `node`, is `nvm`.
 
-### Help! Script done't work!
+### Help! A script didn't work!
 
 Any script that terminates abnormally may provide you with details useful in filing/fixing a bug.
 
