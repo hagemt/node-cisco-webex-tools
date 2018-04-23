@@ -3,9 +3,9 @@ const assert = require('assert')
 
 const { Response } = require('node-fetch')
 
-const SparkError = require('../support/SparkError.js')
+const ClientError = require('../support/ClientError.js')
 
-describe('SparkError', () => {
+describe('ClientError', () => {
 
 	describe('.fromResponse', () => {
 
@@ -17,10 +17,10 @@ describe('SparkError', () => {
 			const response = new Response(JSON.stringify(body), {
 				status: 501,
 			})
-			return SparkError.fromResponse(response)
+			return ClientError.fromResponse(response)
 				.then((error) => {
-					assert(error instanceof SparkError, 'SparkError returned')
-					assert(error instanceof Error, 'SparkError extends Error')
+					assert(error instanceof ClientError, 'ClientError returned')
+					assert(error instanceof Error, 'ClientError extends Error')
 					assert(error.message.includes(body.message), 'includes message')
 					assert(error.message.includes(body.trackingId), 'includes tracking ID')
 					assert.strictEqual(error.response, response, 'has response')
@@ -33,7 +33,7 @@ describe('SparkError', () => {
 	describe('.retryAfter', () => {
 
 		it('runs the provided callback as delayed', (done) => {
-			SparkError.retryAfter(null, done)
+			ClientError.retryAfter(null, done)
 		})
 
 	})

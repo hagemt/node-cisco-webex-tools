@@ -1,5 +1,9 @@
 module.exports = {
 
+	env: {
+		node: true,
+	},
+
 	extends: [
 		'eslint:recommended',
 		'plugin:import/recommended',
@@ -7,11 +11,17 @@ module.exports = {
 		'plugin:node/recommended',
 	],
 
+	parserOptions: {
+		ecmaVersion: 2018,
+	},
+
 	plugins: [
 		'import',
 		'mocha',
 		'node',
 	],
+
+	root: true,
 
 	rules: {
 		'import/unambiguous': ['off'],

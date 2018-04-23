@@ -7,9 +7,10 @@ const chalk = require('chalk')
 const inquirer = require('inquirer')
 const _ = require('lodash')
 
+const PACKAGE_JSON = require('../package.json')
+const ClientError = require('../support/ClientError.js')
+const ClientTools = require('../support/ClientTools.js')
 const log = require('../support/log.js')
-const packageJSON = require('../package.json')
-const SparkTools = require('../support/SparkTools.js')
 
 const RAINBOW = Object.freeze(['red', 'yellow', 'green', 'cyan', 'blue', 'magenta'])
 const rainbow = (string, number) => chalk[RAINBOW[number % RAINBOW.length]](string || '')
@@ -18,114 +19,123 @@ chalk.rainbow = letters => Array.from(letters, (letter, index) => rainbow(letter
 const FLATTERY = Object.freeze(['You are one of a kind.', 'Everyone appreciates you.', 'The world is better with you in it.'])
 const flattery = (array = FLATTERY, index = Math.floor(Math.random() * array.length)) => chalk.rainbow(array[index])
 
+const DEVELOPER_PORTAL_URL = 'https://developer.webex.com/getting-started.html#authentication'
+
 const BOT_EMAIL_ROSTER = path.resolve(__dirname, '..', 'rosters', 'demo.txt')
-const DEFAULT_CONFIG_PATH = path.resolve(os.homedir(), `.${packageJSON.name}`)
-const DEVELOPER_PORTAL_URL = 'https://developer.ciscospark.com' // < env? ^
-const SECRETS_JSON_PATH = path.resolve(DEFAULT_CONFIG_PATH, 'secrets.json')
+const DEFAULT_DIRECTORY_PATH = path.resolve(os.homedir(), `.${PACKAGE_JSON.name}`)
+const SECRETS_JSON_PATH = path.resolve(DEFAULT_DIRECTORY_PATH, 'secrets.json')
 
-const INITIAL_INSTRUCTIONS = `${chalk.rainbow(' * In most environments, this is a one-time setup:')}
-
-\tFrom ${chalk.bold(DEVELOPER_PORTAL_URL)} log in, and click on your avatar in the upper right-hand corner.
-
-\tClick 'Copy' to snag your developer Access Token, but don't Log Out! (will revoke the token) Just close the page!
-
-\t`
-
-const getDisplayName = async () => {
-	const spark = SparkTools.fromAccessToken() // from process.env
-	const { displayName } = await spark.getPersonDetails('me')
+const getDisplayName = async (tools = ClientTools.fromAccessToken(process.env.CISCOSPARK_ACCESS_TOKEN), person = 'me') => {
+	const { displayName } = await tools.getPersonDetails(person)
 	return displayName
 }
 
-const inquireAccessToken = async () => {
+const acquireAccessToken = async (env = process.env, filepath = SECRETS_JSON_PATH) => {
+	if (env.CISCOSPARK_ACCESS_TOKEN) log.debug('will disregard Access Token in environment')
+	// N.B. this mechanism must be replaced by an OAuth2 Implicit Grant Flow or similar
+	// will redirect browser to a microservice that uses an integration to authenticate
 	const EXPLAIN_ACCESS_TOKEN = `
 \t
-\tIn order to perform actions on Cisco Spark, ${chalk.bold(`${packageJSON.name} requires an Access Token.`)}
+\tIn order to perform actions on behalf of users, ${PACKAGE_JSON.name} requires an Access Token recognized by the API.
 \t
 \tOne easy way to get an Access Token is from the developer portal: ${chalk.bold(DEVELOPER_PORTAL_URL)}
 \t
-\tLog in, and then click your avatar in the upper right-hand corner. Copy, and then paste into the prompt below.
-\t
-\tSecrets you provide to ${packageJSON.name} are kept safe in this folder: ${chalk.bold(DEFAULT_CONFIG_PATH)}
+\tN.B. ${PACKAGE_JSON.name} keeps all your secrets safe in a local file: ${chalk.bold(filepath)}
 \t
 ?`
 	const askAccessToken = Object.freeze({
 		message: 'Access Token:',
-		name: 'sparkAccessToken',
+		name: 'newAccessToken',
 		prefix: EXPLAIN_ACCESS_TOKEN,
 	})
 	const answers = await inquirer.prompt([askAccessToken])
-	const sparkAccessToken = answers[askAccessToken.name]
-	if (sparkAccessToken) return sparkAccessToken
+	const providedAccessToken = answers[askAccessToken.name]
+	if (providedAccessToken) return providedAccessToken
 	throw new Error('no Access Token provided')
 }
 
-const loadAuthorization = async () => {
-	log.debug('may load Authorization from file: %s', SECRETS_JSON_PATH)
-	if (process.env.CISCOSPARK_ACCESS_TOKEN) return // no need to read file
-	const { authorization } = JSON.parse(fs.readFileSync(SECRETS_JSON_PATH))
-	const anyAccessToken = _.get(authorization, 'access_token') // String
-	if (anyAccessToken) process.env.CISCOSPARK_ACCESS_TOKEN = anyAccessToken
+const loadAuthorization = async (env = process.env, filepath = SECRETS_JSON_PATH) => {
+	try {
+		log.debug('may load Authorization from file: %s', filepath)
+		if (env.CISCOSPARK_ACCESS_TOKEN) return // no need to read file
+		const { authorization } = JSON.parse(fs.readFileSync(filepath))
+		const savedAccessToken = _.get(authorization, 'access_token')
+		if (savedAccessToken) env.CISCOSPARK_ACCESS_TOKEN = savedAccessToken
+	} catch (error) {
+		throw new ClientError(error.message)
+	}
 }
 
-const saveAuthorization = async (authorization) => {
-	const hasDirectory = fs.existsSync(DEFAULT_CONFIG_PATH) && fs.lstatSync(DEFAULT_CONFIG_PATH).isDirectory()
-	if (!hasDirectory) fs.mkdirSync(DEFAULT_CONFIG_PATH) // make backup of any existing secrets.json for safety:
-	if (fs.existsSync(SECRETS_JSON_PATH)) fs.renameSync(SECRETS_JSON_PATH, `${SECRETS_JSON_PATH}.${Date.now()}`)
-	fs.writeFileSync(SECRETS_JSON_PATH, `${JSON.stringify({ authorization }, null, '\t')}\n`, { mode: 0o600 })
-	log.debug('saved Authorization to file: %s', SECRETS_JSON_PATH)
+const saveAuthorization = async (authorization, filepath = SECRETS_JSON_PATH) => {
+	const directory = path.dirname(filepath)
+	if (!(fs.existsSync(directory) && fs.statSync(directory).isDirectory())) {
+		fs.mkdirSync(directory)
+	}
+	if (fs.existsSync(filepath)) {
+		fs.renameSync(filepath, `${filepath}.${Date.now()}`)
+	}
+	const source = JSON.stringify({ authorization }, null, '\t')
+	fs.writeFileSync(filepath, `${source}\n`, { mode: 0o600 })
+	log.debug('saved Authorization to file: %s', filepath)
 }
 
 module.exports = {
-	inquireAccessToken,
 	loadAuthorization,
 	saveAuthorization,
 }
 
-const swallowLogAndReturnNull = (error) => {
-	log.debug(error)
-	return null
-}
-
 if (!module.parent) {
+	/* eslint-disable no-console */
 	loadAuthorization()
-		.catch(swallowLogAndReturnNull)
 		.then(() => getDisplayName())
-		.catch(async () => {
-			// attempt to recover with interactive prompt:
-			const devAccessToken = await inquireAccessToken()
-			process.env.CISCOSPARK_ACCESS_TOKEN = devAccessToken
-			const displayName = await getDisplayName() // via env
-			await saveAuthorization({ access_token: devAccessToken })
-			return displayName // failure mode: tell user about env
+		.catch(async (loadError) => {
+			try {
+				if (loadError instanceof ClientError && process.stdin.isTTY) {
+					const acquiredAccessToken = await acquireAccessToken()
+					const tools = ClientTools.fromAccessToken(acquiredAccessToken)
+					const displayName = await getDisplayName(tools)
+					await saveAuthorization({
+						access_token: acquiredAccessToken,
+					})
+					return displayName
+				} else {
+					// probably offline
+					log.debug(loadError)
+				}
+			} catch (saveError) {
+				log.debug(saveError)
+			}
 		})
-		.catch(swallowLogAndReturnNull)
 		.then((displayName) => {
 
-			const demoCommand = chalk.bold(`${packageJSON.name} onboard-teams ${chalk.red(BOT_EMAIL_ROSTER)}`)
-			const envCommand = chalk.bold(`CISCOSPARK_ACCESS_TOKEN=${chalk.red('PASTE_ACCESS_TOKEN_HERE')}`)
-			const installCommand = chalk.bold(`npm install -g ${packageJSON.name}@latest`) // good advice
+			const demoText = 'Open your favorite client (after running this command) for a quick demonstration:'
+			const demoCommand = chalk.bold(`${PACKAGE_JSON.name} onboard-teams ${chalk.dim(BOT_EMAIL_ROSTER)}`)
 
-			const initialUNIX = `In your .bashrc (or similar) add a line similar to this: export ${envCommand}`
-			const initialWindows = `In the environment where you run ${packageJSON.name}: set ${envCommand}`
+			const envCommand = chalk.bold(`CISCOSPARK_ACCESS_TOKEN=${chalk.dim('PASTE_ACCESS_TOKEN_HERE')}`)
+			const installCommand = chalk.bold(`npm install --global --no-save ${PACKAGE_JSON.name}@latest`)
 
-			const greetingText = `Thanks for using ${packageJSON.name}, ${displayName || 'intrepid explorer'}!`
-			const helperText = 'Feel free to run the tutorial whenever something is unclear. I am here to help you!'
-			const initialText = `${INITIAL_INSTRUCTIONS} ${process.platform === 'win32' ? initialWindows : initialUNIX}`
-			const normalText = 'Check teams in your Spark client (after running this command) for a quick demonstration:'
-			const updateText = `Tip: use ${installCommand} to update, which may change behavior.`
+			const automaticText = 'Feel free to run the tutorial whenever something is unclear. We are here to help you!'
+			const greetingText = `Thanks for using ${PACKAGE_JSON.name}, ${displayName || 'intrepid explorer'}!`
+			const upgradeText = `Tip: to update (which may change the behavior of some scripts):\n\n\t${installCommand}`
 
-			/* eslint-disable no-console */
+			const manual = `Alternatively, source ~/.bashrc (or similar) with: export ${envCommand}`
+			const manualIssue = `Alternatively, see if this issue may impact others: ${PACKAGE_JSON.bugs.url}`
+			const manualWindows = `Alternatively, in the environment for ${PACKAGE_JSON.name}: set ${envCommand}`
+			const manualText = `We couldn't validate your Access Token. Please retry later, or perhaps with a different user.
+
+\tLog in (if necessary) and read: ${chalk.bold(DEVELOPER_PORTAL_URL)}
+
+\t${PACKAGE_JSON.version.startsWith('0') ? process.platform === 'win32' ? manualWindows : manual : manualIssue}`
+
 			console.log()
 			console.log(`\t${chalk.green(greetingText)} ${chalk.bold(flattery())}`)
 			console.log()
-			console.log(`\t${chalk.yellow(displayName ? normalText : helperText)}`)
+			console.log(`\t${chalk.yellow(displayName ? demoText : automaticText)}`)
 			console.log()
-			console.log(`\t${displayName ? demoCommand : initialText}`)
+			console.log(`\t${chalk.red(displayName ? demoCommand : manualText)}`)
 			console.log()
-			console.log(`\t${chalk.blue(updateText)}`)
+			console.log(`\t${chalk.blue(upgradeText)}`)
 			console.log()
-			/* eslint-enable no-console */
 
 		})
 }

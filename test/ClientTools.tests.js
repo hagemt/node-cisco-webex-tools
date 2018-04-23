@@ -4,21 +4,21 @@ const UUID = require('uuid')
 
 // eslint-disable-next-line node/no-unpublished-require
 const nock = require('nock') // to mock HTTP requests
-const SparkTools = require('../support/SparkTools.js')
+const ClientTools = require('../support/ClientTools.js')
 
-describe('SparkTools', () => {
+describe('ClientTools', () => {
 
-	const newSparkTools = async token => SparkTools.fromAccessToken(token)
+	const newClientTools = async token => ClientTools.fromAccessToken(token)
 
 	describe('.fromAccessToken', () => {
 
-		it('will return a unique instance of SparkTools', async () => {
-			const [one, two] = await Promise.all([newSparkTools('one'), newSparkTools('two')]) // unique
-			assert(one instanceof SparkTools && two instanceof SparkTools && one !== two, 'not unique')
+		it('will return a unique instance of ClientTools', async () => {
+			const [one, two] = await Promise.all([newClientTools('one'), newClientTools('two')]) // unique
+			assert(one instanceof ClientTools && two instanceof ClientTools && one !== two, 'not unique')
 		})
 
 		it('will throw TypeError if not provided a Bearer token', async () => {
-			const error = await newSparkTools('').catch(thrownError => thrownError)
+			const error = await newClientTools('').catch(thrownError => thrownError)
 			assert(error instanceof TypeError, 'expected TypeError thrown due to empty token')
 			assert(error.message.includes('export CISCOSPARK_ACCESS_TOKEN'), 'expected mention of env')
 			assert(error.message.includes('dev.ciscospark.com'), 'expected mention of developer portal')
@@ -62,7 +62,7 @@ describe('SparkTools', () => {
 				test.nock = nock('https://api.ciscospark.com')
 					.get(uri => uri === '/v1/people/me')
 					.reply(200, test.person)
-				test.tools = await newSparkTools(test.token)
+				test.tools = await newClientTools(test.token)
 			})
 
 			it('can get details on a person', async () => {

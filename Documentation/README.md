@@ -1,30 +1,32 @@
-# ciscospark-tools
+# cisco-webex-tools
 
-Refer to the main README.md for now. Supplimental documentation goes in this folder.
+Refer to the main README.md for install, etc. Script developer documentation goes in this folder.
 
-Bonus: check out `spark.army.chainsaw.bash`, and consider adding it to your `~/.bashrc`, or similar.
+Bonus: check out `cisco.army.chainsaw.bash`, and consider adding it to your `~/.bashrc`, or similar.
 
-The assumed shell is `bash` (but should be cross-compatible) with required commands: `base64`, `curl` and `jq`.
+The assumed shell is `bash` (but is easily portable) with required commands: `base64`, `curl` and `jq`.
 
 ## Scripts API
 
-Fork, and then open Pull Requests that add value to `ciscospark-tools`! (max one script per PR, please)
+Fork, and then open Pull Requests that add value to `cisco-webex-tools`! (ideally one script per PR, please)
 
 Each script should ideally consist of a single module and follow the general conventions of `onboard-teams`.
 
-(i.e. make use of `support` to interface with ciscospark.com, with operator interaction when necessary)
+Making `scripts` with great UX should be straightforward and may `require` any dependency we bundle.
 
-Scripts added this way will be callable via the `ciscospark-tools` command, or `npm run script`.
+(i.e. make use of `support` to interface with public APIs, with operator interaction when necessary)
+
+Scripts added this way will be callable via the `cisco-webex-tools` command, or `npm run script`.
 
 Read `scripts/index.js` and "Support API" (below) for some helpful hints. Happy hacking!
 
 ## Support API
 
-The default export is `class SparkTools`, which has a `constructor` that should not be called directly.
+The default export is `class ClientTools`, which has a `constructor` that SHOULD NOT be called directly.
 
-Instances of `SparkTools` should be created via the static factory methods, such as `fromAccessToken`.
+Instances of `ClientTools` MUST be created via the static factory methods, such as `fromAccessToken`.
 
-`SparkTools` class methods are either "plumbing" or "porcelian" (makes use of the plumbing) in nature.
+`ClientTools` class methods are either "plumbing" or "porcelian" (makes use of the plumbing) in nature.
 
 This is a common pattern in the *nix tradition for writing "onion" APIs, which are built in layers.
 
@@ -54,7 +56,7 @@ Most code churn will be on the porcelian methods; the essential plumbing should 
 
 Here's where we should probably try to avoid a junkdrawer of sorts. Consider these existing async methods:
 
-* `addMembershipToTeam` (via email address and team ID; may specify whether or not to add as moderator)
+* `addMembershipToTeam` (via team [.id] and email address [.personEmail]; may also specify [.isModerator])
 * `createTeamAsModerator` (with a specified titular name; your user will be the team's only moderator)
 * `getPersonDetails` and `getTeamDetails` (provided an ID, or Object with .id; default person: "me")
 * `getTeamMembership`, `listDeveloperFeatures` and `setDeveloperFeature` do what they say on the tin

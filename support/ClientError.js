@@ -4,16 +4,16 @@ const _ = require('lodash')
 
 const log = require('./log.js')
 
-class SparkError extends Error {
+class ClientError extends Error {
 
 	static async fromResponse (response) {
-		const statusMessage = SparkError.statusMessage(response)
+		const statusMessage = ClientError.statusMessage(response)
 		const body = await response.json().catch(() => null)
 		const details = _.get(body, 'message', statusMessage)
 		const tracking = _.get(body, 'trackingId', 'missing')
 		const message = `(tracking ID: ${tracking}) ${details}`
-		log.debug('Error from Spark %s', message) // too much logging?
-		return Object.assign(new SparkError(message), { body, response })
+		log.debug('ClientError#fromResponse: %s', message) // too much?
+		return Object.assign(new ClientError(message), { body, response })
 	}
 
 	static async retryAfter (header, retry) {
@@ -29,4 +29,4 @@ class SparkError extends Error {
 
 }
 
-module.exports = SparkError
+module.exports = ClientError
