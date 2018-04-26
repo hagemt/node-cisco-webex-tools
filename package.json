@@ -16,7 +16,7 @@
     "url": "https://github.com/hagemt/node-cisco-webex-tools/issues"
   },
   "dependencies": {
-    "chalk": "2.4.0",
+    "chalk": "2.4.1",
     "co-body": "5.1.1",
     "commander": "2.15.1",
     "dataloader": "1.4.0",
