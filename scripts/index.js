@@ -144,13 +144,13 @@ commander.command('guest-credentials <issuer> <secret> [email]').alias('gc')
 	})
 
 const guestDEBUG = oldDEBUG ? `${oldDEBUG},guest:*` : 'guest:*'
-const guestURL = 'https://www.npmjs.com/package/sparkguest'
-commander.command('spark-guest [args...]').alias('guest')
+const guestURL = 'https://www.npmjs.com/package/guestissuer'
+commander.command('guest-issuer [args...]').alias('guest')
 	.description(chalk.red(`interact with Persistent Guest features (see: ${guestURL})`))
 	.option('-d, --debug', `with DEBUG=${guestDEBUG} (verbose mode)`)
 	.action(async (args, options) => {
 		if (options.debug) process.env.DEBUG = guestDEBUG
-		await asyncChild(process, resolveScript('..', 'node_modules', '.bin', 'sparkguest'), ...args)
+		await asyncChild(process, resolveScript('..', 'node_modules', '.bin', 'guestissuer'), ...args)
 	})
 
 commander.command('onboard-teams [roster-files...]').alias('ot')
