@@ -18,7 +18,7 @@
   "dependencies": {
     "chalk": "2.4.0",
     "co-body": "5.1.1",
-    "commander": "2.15.1",
+    "commander": "2.17.1",
     "dataloader": "1.4.0",
     "debug": "3.1.0",
     "inquirer": "5.2.0",
