@@ -2,7 +2,7 @@
 
 Refer to the main README.md for install, etc. Script developer documentation goes in this folder.
 
-Bonus: check out `cisco.army.chainsaw.bash`, and consider adding it to your `~/.bashrc`, or similar.
+Bonus: check out `cisco.webex.teams.bashrc`, and consider adding it to your `~/.bashrc`, or similar.
 
 The assumed shell is `bash` (but is easily portable) with required commands: `base64`, `curl` and `jq`.
 
@@ -43,7 +43,7 @@ The `.json` method is unique to each instance, and it does a lot of work for you
 3. Will ensure proper request/response body are sent/parsed in JSON. (using standard headers)
 4. On status 429 (Too Many Requests) will retry indefinitely, if response provided `Retry-After`.
 5. Will reject with a `SparkError` (has friendly `message`) in the case of a non-recoverable error.
-6. With `DEBUG=ciscospark-tools`, extra information will be printed to the standard error stream.
+6. With `DEBUG=cisco-webex-tools`, extra information will be printed to the standard error stream.
 7. In the case of a resource with many pages, will parse `Link` headers to aggregate all items.
 
 N.B. The user environment's CISCOSPARK_ACCESS_TOKEN (from dev.ciscospark.com) provides the token for Authorization.
