@@ -27,11 +27,12 @@ const log = Object.freeze({
 	stdout: (...args) => console.log(...args),
 })
 
-const { CISCOSPARK_ACCESS_TOKEN, CISCOSPARK_URL_ORIGIN, NGROK_API_URL, PORT, USER_AGENT } = Object(process.env)
+const { WEBEX_ACCESS_TOKEN, WEBEX_TEAMS_URL, NGROK_API_URL, PORT, TEST_BOT_EMAIL, USER_AGENT } = Object(process.env)
 
-const DEFAULT_ORIGIN = CISCOSPARK_URL_ORIGIN || 'https://api.ciscospark.com' // production
+const DEFAULT_ORIGIN = WEBEX_TEAMS_URL || 'https://api.ciscospark.com' // production gateway
 const buildURL = (string, origin = DEFAULT_ORIGIN) => new url.URL(string, origin).toString()
 const DEFAULT_PATH = path.resolve(os.homedir(), `.${PACKAGE_JSON.name}`, 'secrets.json')
+const DEFAULT_BOT_EMAIL_ADDRESS = TEST_BOT_EMAIL || 'test.webhooks@webex.bot'
 
 const DEFAULT_HTTP_SERVER_PORT = PORT || '8080' // for local test server
 const DEFAULT_NGROK_API_URL = NGROK_API_URL || 'http://localhost:4040'
@@ -152,7 +153,7 @@ const checkWebhookDelivery = async (listeningServer, sendMessage) => {
 
 const loadToken = async (SECRETS_PATH = DEFAULT_PATH) => {
 	const parsed = JSON.parse(fs.readFileSync(SECRETS_PATH)) // may throw
-	return _.get(parsed, 'authorization.access_token', CISCOSPARK_ACCESS_TOKEN)
+	return _.get(parsed, 'authorization.access_token', WEBEX_ACCESS_TOKEN)
 }
 
 const TIMEOUT = Number(process.env.TIMEOUT) || 1000 * 9 // < 10s
@@ -288,7 +289,7 @@ commander.command('list-webhooks').alias('lw')
 	.option('-a, --authorization <path>', 'to JSON file that contains access token')
 	.action(loggingAction(async (options) => {
 		const token = await loadToken(options.authorization)
-		if (!token) throw new Error('missing CISCOSPARK_ACCESS_TOKEN')
+		if (!token) throw new Error('missing WEBEX_ACCESS_TOKEN')
 		const headers = { 'authorization': `Bearer ${token}` }
 		const me = await fetchJSON('/v1/people/me', { headers })
 		const { items } = await fetchJSON('/v1/webhooks', { headers })
@@ -310,7 +311,7 @@ commander.command('create-webhooks <targetURL> [filters...]').alias('cw')
 		const resource = _.get(options, 'resource', 'all')
 		const secret = _.get(options, 'secret', randomBytes())
 		const token = await loadToken(_.get(options, 'authorization'))
-		if (!token) throw new Error('missing CISCOSPARK_ACCESS_TOKEN')
+		if (!token) throw new Error('missing WEBEX_ACCESS_TOKEN')
 		const headers = { 'authorization': `Bearer ${token}` }
 		const me = await fetchJSON('/v1/people/me', { headers })
 		const createWebhook = async (filter /* optional */) => {
@@ -341,7 +342,7 @@ commander.command('delete-webhooks').alias('dw')
 	.option('-a, --authorization <path>', 'to JSON file that contains access token')
 	.action(loggingAction(async (options) => {
 		const token = await loadToken(options.authorization)
-		if (!token) throw new Error('missing CISCOSPARK_ACCESS_TOKEN')
+		if (!token) throw new Error('missing WEBEX_ACCESS_TOKEN')
 		const headers = { 'authorization': `Bearer ${token}` }
 		const { deleted } = await checkExistingWebhooks('/v1/webhooks', { headers })
 		if (deleted.length > 0) log.stdout(stringifyJSON({ deleted })) // print others?
@@ -354,7 +355,7 @@ commander.command('test-webhooks').alias('tw')
 	.option('-p, --port <number>', `default: ${DEFAULT_HTTP_SERVER_PORT} (most users cannot bind ports < 1024)`)
 	.action(loggingAction(async (options) => {
 		const token = await loadToken(options.authorization)
-		if (!token) throw new Error('missing CISCOSPARK_ACCESS_TOKEN')
+		if (!token) throw new Error('missing WEBEX_ACCESS_TOKEN')
 		const headers = { 'authorization': `Bearer ${token}` }
 		headers.trackingid = `ME_TEST_WEBHOOK_${Date.now()}`
 		const me = await fetchJSON('/v1/people/me', { headers })
@@ -375,7 +376,7 @@ commander.command('test-webhooks').alias('tw')
 		try {
 			await checkWebhookDelivery(server, async () => {
 				headers.trackingid = `TRIGGER_TEST_WEBHOOK_${Date.now()}`
-				const send = { toPersonEmail: 'test.webhooks@sparkbot.io', text: new Date().toISOString() }
+				const send = { toPersonEmail: DEFAULT_BOT_EMAIL_ADDRESS, text: new Date().toISOString() }
 				log.debug('send test message: %s', stringifyJSON({ body: send, headers, method: 'POST' }))
 				const sent = await fetchJSON('/v1/messages', { body: send, headers, method: 'POST' })
 				log.debug('sent test message: %s', stringifyJSON(sent))
