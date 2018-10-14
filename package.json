@@ -22,7 +22,7 @@
     "dataloader": "1.4.0",
     "debug": "3.1.0",
     "inquirer": "5.2.0",
-    "joi": "13.2.0",
+    "joi": "14.0.0",
     "jsonwebtoken": "8.2.1",
     "lodash": "4.17.5",
     "ngrok": "3.0.1",
