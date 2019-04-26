@@ -26,7 +26,7 @@
     "jsonwebtoken": "8.2.1",
     "lodash": "4.17.5",
     "ngrok": "3.0.1",
-    "node-fetch": "2.1.2",
+    "node-fetch": "2.4.0",
     "progress": "2.0.0",
     "semver": "5.5.0",
     "sparkguest": "0.4.0",
