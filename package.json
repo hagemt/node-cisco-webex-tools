@@ -25,7 +25,7 @@
     "joi": "13.2.0",
     "jsonwebtoken": "8.2.1",
     "lodash": "4.17.5",
-    "ngrok": "3.0.1",
+    "ngrok": "3.2.0",
     "node-fetch": "2.1.2",
     "progress": "2.0.0",
     "semver": "5.5.0",
