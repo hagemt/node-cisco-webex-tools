@@ -24,7 +24,7 @@
     "inquirer": "5.2.0",
     "joi": "13.2.0",
     "jsonwebtoken": "8.2.1",
-    "lodash": "4.17.5",
+    "lodash": "4.17.12",
     "ngrok": "3.0.1",
     "node-fetch": "2.1.2",
     "progress": "2.0.0",
